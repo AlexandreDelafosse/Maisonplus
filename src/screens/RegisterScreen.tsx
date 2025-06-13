@@ -1,26 +1,47 @@
 // src/screens/RegisterScreen.tsx
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { auth, db } from '../services/firebaseConfig';
+import { setDoc, doc } from 'firebase/firestore';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-type Props = NativeStackScreenProps<any>; // Tu pourras le raffiner plus tard si besoin
+
+type Props = NativeStackScreenProps<any>;
 
 export default function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      await updateProfile(user, { displayName });
+
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email,
+        displayName,
+        role: 'member',
+      });
+
+      navigation.navigate('Home'); // ou autre écran post-inscription
     } catch (err) {
       setError("Échec de l’inscription.");
+      console.error(err);
     }
   };
 
   return (
     <View style={styles.container}>
+      <TextInput
+        placeholder="Nom d'affichage"
+        value={displayName}
+        onChangeText={setDisplayName}
+        style={styles.input}
+      />
       <TextInput
         placeholder="Email"
         value={email}

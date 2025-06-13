@@ -1,3 +1,4 @@
+// ../src/screens/NotesListScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -6,17 +7,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NotesStackParamList } from '../navigation/NotesStack';
+import { getAuth } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 
 type Note = {
+  author: string;
   id: string;
   title: string;
   content: string;
   tags?: string[];
+  userId: string;
 };
 
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NotesList'>;
@@ -28,22 +34,28 @@ export default function NotesListScreen() {
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'alpha'>('recent');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const isFocused = useIsFocused();
+  const user = getAuth().currentUser;
+
+  const loadNotes = async () => {
+    if (!user) return;
+
+    try {
+      const q = query(collection(db, 'notes'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+
+      const loadedNotes: Note[] = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as Note[];
+
+      setNotes(loadedNotes);
+    } catch (err) {
+      Alert.alert('Erreur', 'Impossible de charger les notes.');
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
-    const loadNotes = async () => {
-      const data = await AsyncStorage.getItem('notes');
-      if (data) {
-        try {
-          const parsed = JSON.parse(data);
-          setNotes(parsed);
-        } catch (e) {
-          console.error('Erreur JSON :', e);
-        }
-      } else {
-        setNotes([]);
-      }
-    };
-
     if (isFocused) {
       loadNotes();
     }
@@ -64,6 +76,16 @@ export default function NotesListScreen() {
       if (sortOrder === 'oldest') return a.id.localeCompare(b.id);
       return 0;
     });
+
+  const deleteNote = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'notes', id));
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+    } catch (err) {
+      Alert.alert('Erreur', 'Impossible de supprimer la note.');
+      console.error(err);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -112,36 +134,28 @@ export default function NotesListScreen() {
       <FlatList
         data={filteredNotes}
         keyExtractor={(item) => item.id}
-renderItem={({ item }) => {
-  const safeTags = item.tags ?? [];
+        renderItem={({ item }) => {
+          const safeTags = item.tags ?? [];
+          return (
+            <View style={styles.noteRow}>
+              <TouchableOpacity
+                style={styles.noteContent}
+                onPress={() => navigation.navigate('NoteEditor', { noteId: item.id })}
+              >
+                <Text style={styles.title}>{item.title}</Text>
+                {safeTags.length > 0 && (
+                  <Text style={styles.tags}>#{safeTags.join('  #')}</Text>
+                )}
 
-  return (
-    <View style={styles.noteRow}>
-      <TouchableOpacity
-        style={styles.noteContent}
-        onPress={() => navigation.navigate('NoteEditor', { noteId: item.id })}
-      >
-        <Text style={styles.title}>{item.title}</Text>
-        {safeTags.length > 0 && (
-          <Text style={styles.tags}>#{safeTags.join('  #')}</Text>
-        )}
-      </TouchableOpacity>
+                <Text style={styles.author}>✍️ {item.author || 'Inconnu'}</Text>
+              </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={async () => {
-          const data = await AsyncStorage.getItem('notes');
-          const notes = data ? JSON.parse(data) : [];
-          const filtered = notes.filter((n: Note) => n.id !== item.id);
-          await AsyncStorage.setItem('notes', JSON.stringify(filtered));
-          setNotes(filtered);
+              <TouchableOpacity onPress={() => deleteNote(item.id)}>
+                <Text style={styles.trashIcon}>🗑️</Text>
+              </TouchableOpacity>
+            </View>
+          );
         }}
-      >
-        <Text style={styles.trashIcon}>🗑️</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}}
-
         ListEmptyComponent={
           <Text style={styles.empty}>Aucune note ne correspond à la recherche.</Text>
         }
@@ -202,14 +216,27 @@ const styles = StyleSheet.create({
   tagText: {
     color: '#333',
   },
-  note: {
+  noteRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#f0f0f0',
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
   },
-  title: { fontSize: 16 },
-  empty: { textAlign: 'center', marginTop: 20, color: '#666' },
+  noteContent: {
+    flex: 1,
+  },
+  trashIcon: {
+    fontSize: 18,
+    marginLeft: 12,
+  },
+  empty: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#666',
+  },
   addButton: {
     backgroundColor: '#007AFF',
     padding: 14,
@@ -218,38 +245,14 @@ const styles = StyleSheet.create({
     bottom: 30,
     right: 30,
   },
+  author: {
+  fontSize: 12,
+  color: '#666',
+  marginTop: 4,
+  fontStyle: 'italic',
+},
+
   addButtonText: { color: 'white', fontWeight: 'bold' },
-  tags: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
-noteRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  backgroundColor: '#f0f0f0',
-  padding: 16,
-  borderRadius: 8,
-  marginBottom: 12,
-},
-
-noteContent: {
-  flex: 1,
-},
-
-trashIcon: {
-  fontSize: 18,
-  marginLeft: 12,
-},
-
-
-trashButton: {
-  padding: 12,
-},
-
-trashText: {
-  fontSize: 20,
-},
-
+  title: { fontSize: 16 },
+  tags: { fontSize: 12, color: '#888', marginTop: 4 },
 });

@@ -13,7 +13,7 @@ const Stack = createNativeStackNavigator<NotesStackParamList>();
 export default function NotesStack() {
   return (
     <Stack.Navigator initialRouteName="NotesList">
-      <Stack.Screen name="NotesList" component={NotesListScreen} options={{ title: 'Mes Notes' }} />
+      <Stack.Screen name="NotesList" component={NotesListScreen} />
       <Stack.Screen name="NoteEditor" component={NoteEditorScreen} options={{ title: 'Éditer la note' }} />
     </Stack.Navigator>
   );

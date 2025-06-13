@@ -1,3 +1,4 @@
+// ../src/screens/NoteEditorScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -9,12 +10,21 @@ import {
   Platform,
   ScrollView,
   Keyboard,
+  Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import uuid from 'react-native-uuid';
 import { NotesStackParamList } from '../navigation/NotesStack';
+import { db } from '../services/firebaseConfig';
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  doc,
+  getDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 type NoteEditorScreenRouteProp = RouteProp<NotesStackParamList, 'NoteEditor'>;
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NoteEditor'>;
@@ -29,19 +39,27 @@ export default function NoteEditorScreen() {
   const [tags, setTags] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  const auth = getAuth();
+  const user = auth.currentUser;
+
   useEffect(() => {
     if (noteId) {
-      AsyncStorage.getItem('notes').then((data) => {
-        if (data) {
-          const notes = JSON.parse(data);
-          const note = notes.find((n: any) => n.id === noteId);
-          if (note) {
-            setTitle(note.title);
-            setContent(note.content);
-            setTags((note.tags || []).join(', '));
+      const fetchNote = async () => {
+        try {
+          const noteRef = doc(db, 'notes', noteId);
+          const snap = await getDoc(noteRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            setTitle(data.title);
+            setContent(data.content);
+            setTags((data.tags || []).join(', '));
           }
+        } catch (err) {
+          Alert.alert('Erreur', "Impossible de charger la note.");
+          console.error(err);
         }
-      });
+      };
+      fetchNote();
     }
 
     const show = Keyboard.addListener('keyboardWillShow', (e) =>
@@ -58,8 +76,7 @@ export default function NoteEditorScreen() {
   }, [noteId]);
 
   const saveNote = async () => {
-    const data = await AsyncStorage.getItem('notes');
-    const notes = data ? JSON.parse(data) : [];
+    if (!user) return;
 
     if (title.trim() === '' && content.trim() === '') {
       navigation.goBack();
@@ -71,22 +88,32 @@ export default function NoteEditorScreen() {
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    if (noteId) {
-      const updated = notes.map((n: any) =>
-        n.id === noteId ? { ...n, title, content, tags: tagArray } : n
-      );
-      await AsyncStorage.setItem('notes', JSON.stringify(updated));
-    } else {
-      const newNote = {
-        id: uuid.v4() as string,
-        title,
-        content,
-        tags: tagArray,
-      };
-      await AsyncStorage.setItem('notes', JSON.stringify([...notes, newNote]));
-    }
+    try {
+      if (noteId) {
+        const noteRef = doc(db, 'notes', noteId);
+        await updateDoc(noteRef, {
+          title,
+          content,
+          tags: tagArray,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, 'notes'), {
+          title,
+          content,
+          tags: tagArray,
+          userId: user.uid,
+          author: user.displayName || '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
 
-    navigation.goBack();
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert('Erreur', 'Impossible de sauvegarder la note.');
+      console.error(err);
+    }
   };
 
   return (
@@ -129,14 +156,8 @@ export default function NoteEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 20,
-  },
+  wrapper: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { padding: 16, paddingBottom: 20 },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
