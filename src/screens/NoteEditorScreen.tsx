@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   View,
+  Text,
   TextInput,
   StyleSheet,
-  Alert,
   TouchableOpacity,
-  Text,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  Keyboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -25,6 +26,8 @@ export default function NoteEditorScreen() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tags, setTags] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
     if (noteId) {
@@ -35,138 +38,143 @@ export default function NoteEditorScreen() {
           if (note) {
             setTitle(note.title);
             setContent(note.content);
+            setTags((note.tags || []).join(', '));
           }
         }
       });
     }
+
+    const show = Keyboard.addListener('keyboardWillShow', (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener('keyboardWillHide', () =>
+      setKeyboardHeight(0)
+    );
+
+    return () => {
+      show.remove();
+      hide.remove();
+    };
   }, [noteId]);
 
-const saveNote = async () => {
-  console.log('👉 Fonction saveNote appelée !');
-
-  try {
+  const saveNote = async () => {
     const data = await AsyncStorage.getItem('notes');
     const notes = data ? JSON.parse(data) : [];
 
     if (title.trim() === '' && content.trim() === '') {
-      console.log('🛑 Note vide, rien sauvegardé');
       navigation.goBack();
       return;
     }
 
+    const tagArray = tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
     if (noteId) {
       const updated = notes.map((n: any) =>
-        n.id === noteId ? { ...n, title, content } : n
+        n.id === noteId ? { ...n, title, content, tags: tagArray } : n
       );
       await AsyncStorage.setItem('notes', JSON.stringify(updated));
-      console.log('✏️ Note mise à jour :', title);
     } else {
-      const newNote = { id: uuid.v4() as string, title, content };
-      const newNotes = [...notes, newNote];
-      console.log('🧾 Contenu de newNotes à sauvegarder :', newNotes);
-
-      await AsyncStorage.setItem('notes', JSON.stringify(newNotes));
-      console.log('✅ Notes sauvegardées avec succès !');
+      const newNote = {
+        id: uuid.v4() as string,
+        title,
+        content,
+        tags: tagArray,
+      };
+      await AsyncStorage.setItem('notes', JSON.stringify([...notes, newNote]));
     }
 
     navigation.goBack();
-  } catch (e) {
-    console.error('❌ Erreur de sauvegarde :', e);
-  }
-};
-
-  const deleteNote = async () => {
-    Alert.alert('Supprimer', 'Supprimer cette note ?', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          const data = await AsyncStorage.getItem('notes');
-          const notes = data ? JSON.parse(data) : [];
-          const filtered = notes.filter((n: any) => n.id !== noteId);
-          await AsyncStorage.setItem('notes', JSON.stringify(filtered));
-          navigation.goBack();
-
-        },
-      },
-    ]);
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.wrapper}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={100}
     >
-      <TextInput
-        placeholder="Titre"
-        value={title}
-        onChangeText={setTitle}
-        style={styles.title}
-      />
-      <TextInput
-        placeholder="Contenu"
-        value={content}
-        onChangeText={setContent}
-        style={styles.content}
-        multiline
-      />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <TextInput
+          placeholder="Titre"
+          value={title}
+          onChangeText={setTitle}
+          style={styles.title}
+          multiline
+        />
+        <TextInput
+          placeholder="Contenu"
+          value={content}
+          onChangeText={setContent}
+          style={styles.content}
+          multiline
+          textAlignVertical="top"
+        />
+      </ScrollView>
 
-      <View style={styles.buttons}>
-        {noteId && (
-          <TouchableOpacity style={styles.delete} onPress={deleteNote}>
-            <Text style={styles.deleteText}>Supprimer</Text>
-          </TouchableOpacity>
-        )}
-<TouchableOpacity
-  style={styles.save}
-  onPress={() => {
-    console.log('🖱️ Bouton "Sauvegarder" pressé');
-    saveNote();
-  }}
->
-  <Text style={styles.saveText}>Sauvegarder</Text>
-</TouchableOpacity>
-
+      <View style={styles.fixedBottom}>
+        <TextInput
+          placeholder="Tags (séparés par des virgules)"
+          value={tags}
+          onChangeText={setTags}
+          style={styles.tags}
+        />
+        <TouchableOpacity style={styles.saveButton} onPress={saveNote}>
+          <Text style={styles.saveText}>Sauvegarder</Text>
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 20,
+  },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 12,
     borderBottomWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 16,
+    borderColor: '#ddd',
+    paddingBottom: 4,
   },
   content: {
-    flex: 1,
-    textAlignVertical: 'top',
     fontSize: 16,
-    lineHeight: 22,
+    minHeight: 200,
+    lineHeight: 24,
   },
-  buttons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
+  fixedBottom: {
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderColor: '#eee',
   },
-  save: {
+  tags: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  saveButton: {
     backgroundColor: '#007AFF',
-    padding: 12,
+    padding: 14,
     borderRadius: 10,
-    flex: 1,
-    marginLeft: 8,
+    marginBottom: 12,
   },
-  saveText: { color: 'white', textAlign: 'center' },
-  delete: {
-    backgroundColor: '#ff3b30',
-    padding: 12,
-    borderRadius: 10,
-    flex: 1,
-    marginRight: 8,
+  saveText: {
+    color: 'white',
+    textAlign: 'center',
+    fontWeight: 'bold',
   },
-  deleteText: { color: 'white', textAlign: 'center' },
 });
