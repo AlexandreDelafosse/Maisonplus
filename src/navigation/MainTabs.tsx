@@ -5,6 +5,7 @@ import { TasksScreen } from '../screens/TasksScreen';
 import  ProfileScreen  from '../screens/ProfileScreen';
 import  TeamScreen  from '../screens/TeamScreen';
 import CalendarScreen from '../screens/CalendarScreen';
+import BudgetScreen from '../screens/BudgetScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -16,6 +17,7 @@ export default function MainTabs() {
       <Tab.Screen name="Calendar" component={CalendarScreen} />
       <Tab.Screen name="Team" component={TeamScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Budget" component={BudgetScreen} />
     </Tab.Navigator>
   );
 }

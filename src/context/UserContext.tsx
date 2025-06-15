@@ -7,9 +7,11 @@ import { db } from '../services/firebaseConfig';
 type UserData = {
   uid: string;
   email: string;
-  displayName: string;
   role: 'admin' | 'member';
+  displayName: string;
+  teamId?: string;
 };
+
 
 const UserContext = createContext<UserData | null>(null);
 

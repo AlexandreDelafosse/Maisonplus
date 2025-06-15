@@ -21,29 +21,38 @@ export default function ProfileScreen() {
   const [role, setRole] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
+useEffect(() => {
+  if (!user) return;
 
-    const userRef = doc(db, 'users', user.uid);
+  const userRef = doc(db, 'users', user.uid);
 
-    const fetchData = async () => {
-      try {
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setFirstName(data.firstName || '');
-          setLastName(data.lastName || '');
-          setRole(data.role || '');
+  const fetchData = async () => {
+    try {
+      const docSnap = await getDoc(userRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setFirstName(data.firstName || '');
+        setLastName(data.lastName || '');
+        setRole(data.role || '');
+
+        // 👇 Affiche une alerte si le profil n’est pas complété
+        if (data.needsProfileCompletion) {
+          Alert.alert(
+            "Bienvenue !",
+            "Veuillez compléter votre profil pour finaliser l'inscription."
+          );
         }
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Erreur chargement profil :', err);
-        Alert.alert('Erreur', "Impossible de charger les données de profil.");
       }
-    };
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Erreur chargement profil :', err);
+      Alert.alert('Erreur', "Impossible de charger les données de profil.");
+    }
+  };
 
-    fetchData();
-  }, [user]);
+  fetchData();
+}, [user]);
+
 
 const saveProfile = async () => {
   if (!user) return;
@@ -56,13 +65,15 @@ const saveProfile = async () => {
 
     await updateProfile(user, { displayName: newDisplayName });
 
-    await updateDoc(userRef, {
-      firstName,
-      lastName,
-      displayName: newDisplayName,
-      email: user.email || '',
-      uid: user.uid,
-    });
+await updateDoc(userRef, {
+  firstName,
+  lastName,
+  displayName: newDisplayName,
+  email: user.email || '',
+  uid: user.uid,
+  needsProfileCompletion: false, // ✅ on supprime ce flag ici
+});
+
 
     Alert.alert('Succès', 'Profil mis à jour avec succès.');
   } catch (err) {
