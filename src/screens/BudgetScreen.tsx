@@ -1,38 +1,25 @@
 // src/screens/BudgetScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  Alert,
+  View, Text, StyleSheet, FlatList, Modal, TextInput, TouchableOpacity, Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { getAuth } from 'firebase/auth';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  getDocs,
-} from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
-import { Picker } from '@react-native-picker/picker';
+import { getAuth } from 'firebase/auth';
+import { useCurrentTeam } from '../hooks/useCurrentTeam';
+import { useTeamMembers } from '../hooks/useTeamMembers';
+import type { Member } from '../hooks/useTeamMembers';
+import { Dimensions } from 'react-native';
+import { PieChart } from 'react-native-chart-kit';
+
 
 type Expense = {
   label: string;
   amount: number;
   paidBy: string;
   date: string;
-};
-
-type User = {
-  id: string;
-  displayName: string;
+  tags?: string[];
 };
 
 type Summary = {
@@ -44,19 +31,21 @@ type Summary = {
 export default function BudgetScreen() {
   const auth = getAuth();
   const currentUser = auth.currentUser;
+  const { teamId } = useCurrentTeam();
+  const { members, loading: loadingUsers } = useTeamMembers(teamId || '');
 
-  const [month, setMonth] = useState<string>('');
-  const [totalBudget, setTotalBudget] = useState<number>(0);
+  const [month, setMonth] = useState('');
+  const [totalBudget, setTotalBudget] = useState(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
-  const [role, setRole] = useState('');
   const [date, setDate] = useState(new Date());
+  const [tags, setTags] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [totalsByUser, setTotalsByUser] = useState<Summary[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const now = new Date();
@@ -65,24 +54,25 @@ export default function BudgetScreen() {
   }, []);
 
   useEffect(() => {
-    if (month) loadBudget();
-  }, [month]);
+    if (month && teamId) {
+      loadBudget();
+    }
+  }, [month, teamId]);
 
   useEffect(() => {
-    if (users.length > 0 && !paidBy) {
-      const fallback = users.find(u => u.id === currentUser?.uid) || users[0];
+    if (!paidBy && members.length > 0) {
+      const fallback = members.find(m => m.id === currentUser?.uid) || members[0];
       setPaidBy(fallback.id);
     }
-  }, [users]);
+  }, [members]);
 
   useEffect(() => {
     calculateTotalsByUser();
-  }, [expenses, users]);
+  }, [expenses, members]);
 
   const loadBudget = async () => {
-    if (!currentUser) return;
-
-    const budgetRef = doc(db, 'budgets', month);
+    if (!teamId) return;
+    const budgetRef = doc(db, 'teams', teamId, 'budgets', month);
 
     try {
       const snap = await getDoc(budgetRef);
@@ -90,31 +80,18 @@ export default function BudgetScreen() {
         const data = snap.data();
         setTotalBudget(data.totalBudget);
         setExpenses(data.expenses || []);
-        console.log('🔄 Dépenses chargées :', data.expenses);
       } else {
-        await setDoc(budgetRef, { totalBudget: 0, expenses: [], createdBy: currentUser.uid });
+        await setDoc(budgetRef, { totalBudget: 0, expenses: [], createdBy: currentUser?.uid });
         setTotalBudget(0);
         setExpenses([]);
       }
-
-      const userRef = doc(db, 'users', currentUser.uid);
-      const userSnap = await getDoc(userRef);
-      setRole(userSnap.data()?.role || '');
-
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const userList: User[] = usersSnap.docs.map(doc => ({
-        id: doc.id,
-        ...(doc.data() as { displayName: string }),
-      }));
-      setUsers(userList);
-      console.log('👥 Utilisateurs :', userList);
     } catch (error) {
       console.error('❌ Erreur chargement budget :', error);
       Alert.alert('Erreur', 'Impossible de charger les données du budget.');
     }
   };
 
-  const addExpense = async () => {
+  const addOrUpdateExpense = async () => {
     if (!label.trim() || !amount || isNaN(parseFloat(amount))) {
       Alert.alert('Erreur', 'Veuillez saisir un libellé et un montant valide.');
       return;
@@ -129,45 +106,84 @@ export default function BudgetScreen() {
       amount: parseFloat(amount),
       paidBy,
       date: date.toISOString(),
+      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0),
     };
 
-    const updated = [...expenses, newExpense];
-    const budgetRef = doc(db, 'budgets', month);
+    let updated = [...expenses];
+    if (editingIndex !== null) {
+      updated[editingIndex] = newExpense;
+    } else {
+      updated.push(newExpense);
+    }
 
     try {
+      const budgetRef = doc(db, 'teams', teamId!, 'budgets', month);
       await updateDoc(budgetRef, { expenses: updated });
       setExpenses(updated);
-      setModalVisible(false);
       resetModal();
+      setModalVisible(false);
     } catch (error) {
-      console.error('❌ Erreur ajout dépense :', error);
-      Alert.alert('Erreur', "Impossible d'ajouter la dépense.");
+      console.error('❌ Erreur ajout ou modif dépense :', error);
+      Alert.alert('Erreur', "Impossible de sauvegarder la dépense.");
+    }
+  };
+
+  const deleteExpense = async (index: number) => {
+    const updated = [...expenses];
+    updated.splice(index, 1);
+    try {
+      const budgetRef = doc(db, 'teams', teamId!, 'budgets', month);
+      await updateDoc(budgetRef, { expenses: updated });
+      setExpenses(updated);
+    } catch (error) {
+      console.error('❌ Erreur suppression dépense :', error);
+      Alert.alert('Erreur', "Impossible de supprimer la dépense.");
     }
   };
 
   const resetModal = () => {
     setLabel('');
     setAmount('');
-    setPaidBy(currentUser?.uid || users[0]?.id || '');
+    setPaidBy(currentUser?.uid || members[0]?.id || '');
     setDate(new Date());
+    setTags('');
+    setEditingIndex(null);
   };
 
   const calculateTotalsByUser = () => {
     const map: { [userId: string]: number } = {};
-
     expenses.forEach(exp => {
       map[exp.paidBy] = (map[exp.paidBy] || 0) + exp.amount;
     });
-
-    const summary: Summary[] = users.map(user => ({
+    const summary: Summary[] = members.map(user => ({
       userId: user.id,
       displayName: user.displayName,
       total: map[user.id] || 0,
     }));
-
     setTotalsByUser(summary);
-    console.log('📊 Totaux par utilisateur :', summary);
   };
+
+const calculateTotalsByTag = () => {
+  const tagMap: { [tag: string]: number } = {};
+
+  expenses.forEach(exp => {
+    const splitAmount = exp.amount / (exp.tags?.length || 1);
+    exp.tags?.forEach(tag => {
+      tagMap[tag] = (tagMap[tag] || 0) + splitAmount;
+    });
+  });
+
+  const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+
+  return Object.entries(tagMap).map(([tag, value], index) => ({
+    name: tag,
+    amount: value,
+    color: colors[index % colors.length],
+    legendFontColor: '#333',
+    legendFontSize: 12,
+  }));
+};
+
 
   return (
     <View style={styles.container}>
@@ -176,7 +192,7 @@ export default function BudgetScreen() {
 
       {totalsByUser.length > 0 && (
         <View style={styles.summaryBox}>
-          {totalsByUser.map((item) => (
+          {totalsByUser.map(item => (
             <Text key={item.userId} style={styles.summaryText}>
               {item.displayName} : {item.total.toFixed(2)} €
             </Text>
@@ -184,15 +200,50 @@ export default function BudgetScreen() {
         </View>
       )}
 
+      {calculateTotalsByTag().length > 0 && (
+<PieChart
+  data={calculateTotalsByTag()}
+  width={Dimensions.get('window').width - 40}
+  height={180}
+  chartConfig={{
+    color: () => '#000',
+    labelColor: () => '#333',
+  }}
+  accessor="amount"
+  backgroundColor="transparent"
+  paddingLeft="20"
+/>
+
+      )}
+
       <FlatList
         data={expenses}
         keyExtractor={(_, index) => index.toString()}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <View style={styles.expenseItem}>
             <Text style={styles.expenseText}>{item.label} - {item.amount.toFixed(2)} €</Text>
             <Text style={styles.meta}>
-              Payé par : {users.find(u => u.id === item.paidBy)?.displayName || 'Inconnu'} - {new Date(item.date).toLocaleDateString()}
+              Payé par : {members.find(u => u.id === item.paidBy)?.displayName || 'Inconnu'} - {new Date(item.date).toLocaleDateString()}
             </Text>
+            {item.tags && (
+              <Text style={styles.meta}>Tags : {item.tags.join(', ')}</Text>
+            )}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity onPress={() => {
+                setEditingIndex(index);
+                setLabel(item.label);
+                setAmount(item.amount.toString());
+                setPaidBy(item.paidBy);
+                setDate(new Date(item.date));
+                setTags(item.tags?.join(', ') || '');
+                setModalVisible(true);
+              }}>
+                <Text style={{ color: 'blue' }}>Modifier</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => deleteExpense(index)}>
+                <Text style={{ color: 'red' }}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       />
@@ -200,7 +251,7 @@ export default function BudgetScreen() {
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => {
-          if (users.length === 0) {
+          if (members.length === 0) {
             Alert.alert('Chargement...', 'Les membres ne sont pas encore chargés.');
             return;
           }
@@ -212,11 +263,10 @@ export default function BudgetScreen() {
 
       <Modal visible={modalVisible} animationType="slide">
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Nouvelle dépense</Text>
+          <Text style={styles.modalTitle}>{editingIndex !== null ? 'Modifier' : 'Nouvelle'} dépense</Text>
 
           <TextInput
             placeholder="Nom de la dépense"
-            placeholderTextColor="#999"
             style={styles.input}
             value={label}
             onChangeText={setLabel}
@@ -224,20 +274,36 @@ export default function BudgetScreen() {
 
           <TextInput
             placeholder="Montant"
-            placeholderTextColor="#999"
             style={styles.input}
             keyboardType="numeric"
             value={amount}
             onChangeText={setAmount}
           />
 
+          <TextInput
+            placeholder="Tags (ex: nourriture, transport)"
+            style={styles.input}
+            value={tags}
+            onChangeText={setTags}
+          />
+
           <Text style={styles.label}>Payé par :</Text>
-          <Picker selectedValue={paidBy} onValueChange={setPaidBy}>
-            <Picker.Item label="Sélectionner un membre" value="" enabled={false} />
-            {users.map(user => (
-              <Picker.Item key={user.id} label={user.displayName} value={user.id} />
+          <View style={styles.paidByList}>
+            {members.map(user => (
+              <TouchableOpacity
+                key={user.id}
+                onPress={() => setPaidBy(user.id)}
+                style={[
+                  styles.paidByItem,
+                  paidBy === user.id && styles.paidByItemSelected,
+                ]}>
+                <Text style={styles.paidByText}>
+                  {user.displayName}
+                  {paidBy === user.id ? ' ✅' : ''}
+                </Text>
+              </TouchableOpacity>
             ))}
-          </Picker>
+          </View>
 
           <TouchableOpacity onPress={() => setShowDatePicker(true)}>
             <Text style={styles.input}>{date.toLocaleDateString()}</Text>
@@ -255,8 +321,8 @@ export default function BudgetScreen() {
             />
           )}
 
-          <TouchableOpacity style={styles.saveButton} onPress={addExpense}>
-            <Text style={styles.saveButtonText}>Ajouter</Text>
+          <TouchableOpacity style={styles.saveButton} onPress={addOrUpdateExpense}>
+            <Text style={styles.saveButtonText}>{editingIndex !== null ? 'Mettre à jour' : 'Ajouter'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -278,11 +344,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
   },
-  summaryText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
-  },
+  summaryText: { fontSize: 14, color: '#333', marginBottom: 4 },
   expenseItem: { marginBottom: 12 },
   expenseText: { fontSize: 16 },
   meta: { fontSize: 12, color: '#666' },
@@ -315,4 +377,17 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   saveButtonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  paidByList: { marginTop: 10 },
+  paidByItem: {
+    padding: 10,
+    backgroundColor: '#eee',
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  paidByItemSelected: {
+    backgroundColor: '#007AFF',
+  },
+  paidByText: {
+    color: '#000',
+  },
 });

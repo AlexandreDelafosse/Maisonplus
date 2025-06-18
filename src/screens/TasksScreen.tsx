@@ -1,127 +1,83 @@
 // src/screens/TasksScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
+  View, Text, FlatList, Modal, TextInput,
+  TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { getAuth } from 'firebase/auth';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  onSnapshot,
-  updateDoc,
-  deleteDoc,
-  doc,
-  getDocs,
-  getDoc,
-} from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
-import Checkbox from '../components/Checkbox';
-import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-// --- TYPES ---
-type User = {
-  id: string;
-  displayName: string;
-};
+import { useCurrentTeam } from '../hooks/useCurrentTeam';
+import { TeamTask, useTeamTasks } from '../hooks/useTeamTasks';
+import { useTeamMembers } from '../hooks/useTeamMembers';
+import Checkbox from '../components/Checkbox';
 
-type Task = {
-  id: string;
-  title: string;
-  assignedTo: string;
-  completed: boolean;
-  recurrence: string;
-  dueDate: string;
+const recurrenceLabels: Record<'none' | 'daily' | 'weekly' | 'monthly', string> = {
+  none: 'Aucune',
+  daily: 'Tous les jours',
+  weekly: 'Toutes les semaines',
+  monthly: 'Tous les mois',
 };
 
 export function TasksScreen() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const { teamId } = useCurrentTeam();
+  const { tasks, loading, addTask, updateTask } = useTeamTasks(teamId || '');
+  const { members } = useTeamMembers(teamId || '');
+
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
-  const [assignedTo, setAssignedTo] = useState('');
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [recurrence, setRecurrence] = useState('none');
+  const [assignedTo, setAssignedTo] = useState<string[]>([]);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [description, setDescription] = useState('');
+
 
   const auth = getAuth();
   const currentUser = auth.currentUser;
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const snapshot = await getDocs(collection(db, 'users'));
-      const list: User[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        displayName: doc.data().displayName || 'Anonyme',
-      }));
-      setUsers(list);
-    };
-    fetchUsers();
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const userRef = doc(db, 'users', currentUser.uid);
-    getDoc(userRef).then(docSnap => {
-      const userRole = docSnap.data()?.role;
-      const q = userRole === 'admin'
-        ? query(collection(db, 'tasks'))
-        : query(collection(db, 'tasks'), where('assignedTo', '==', currentUser.uid));
-
-      const unsub = onSnapshot(q, snapshot => {
-        const list: Task[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...(doc.data() as Omit<Task, 'id'>),
-        }));
-        setTasks(list);
-      });
-      return unsub;
-    });
-  }, [currentUser]);
-
-  const openModal = (task: Task | null = null) => {
-    if (task) {
-      setEditingTask(task);
-      setTitle(task.title);
-      setAssignedTo(task.assignedTo);
-      setRecurrence(task.recurrence || 'none');
-      setDueDate(task.dueDate ? new Date(task.dueDate) : new Date());
-    } else {
-      setEditingTask(null);
-      setTitle('');
-      setAssignedTo('');
-      setRecurrence('none');
-      setDueDate(new Date());
-    }
+  const openModal = (task: TeamTask | null = null) => {
+if (task) {
+  setEditingTaskId(task.id);
+  setTitle(task.title);
+  setDescription(task.description || '');
+  setAssignedTo(task.assignedTo || []);
+  setRecurrence(task.recurrence || 'none');
+  setDueDate(task.dueDate ? new Date(task.dueDate) : new Date());
+} else {
+  setEditingTaskId(null);
+  setTitle('');
+  setDescription('');
+  setAssignedTo([]);
+  setRecurrence('none');
+  setDueDate(new Date());
+}
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return;
-    const data = {
-      title,
-      assignedTo,
-      completed: false,
-      recurrence,
-      dueDate: dueDate.toISOString(),
-    };
+    if (!title.trim() || !teamId || !currentUser) return;
+
+const data: Omit<TeamTask, 'id' | 'createdAt'> = {
+  title,
+  description,
+  assignedTo,
+  status: 'todo',
+  recurrence,
+  dueDate,
+  teamId,
+  createdBy: currentUser.uid,
+};
+
+
     try {
-      if (editingTask) {
-        await updateDoc(doc(db, 'tasks', editingTask.id), data);
+      if (editingTaskId) {
+        await updateTask(editingTaskId, data);
       } else {
-        await addDoc(collection(db, 'tasks'), data);
+        await addTask(data);
       }
       setModalVisible(false);
     } catch (err) {
@@ -129,28 +85,48 @@ export function TasksScreen() {
     }
   };
 
-  const toggleCompleted = async (task: Task) => {
-    await updateDoc(doc(db, 'tasks', task.id), { completed: !task.completed });
+  const toggleCompleted = async (task: TeamTask) => {
+    await updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' });
+  };
+
+  const toggleUserAssignment = (userId: string) => {
+    setAssignedTo(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
   };
 
   const filteredTasks = tasks.filter(task => {
-    const matchesUser = !selectedUser || task.assignedTo === selectedUser;
-    const matchesDate = !selectedDate || new Date(task.dueDate).toDateString() === selectedDate.toDateString();
+    const matchesUser =
+      !selectedUser || (task.assignedTo && task.assignedTo.includes(selectedUser));
+    const matchesDate =
+      !selectedDate ||
+      (task.dueDate && new Date(task.dueDate).toDateString() === selectedDate.toDateString());
     return matchesUser && matchesDate;
   });
 
   return (
     <View style={{ flex: 1, padding: 20 }}>
       <View style={{ flexDirection: 'row', marginBottom: 10 }}>
-        <Picker
-          selectedValue={selectedUser}
-          onValueChange={setSelectedUser}
-          style={{ flex: 1 }}>
-          <Picker.Item label="Tous les membres" value="" />
-          {users.map(user => (
-            <Picker.Item key={user.id} label={user.displayName} value={user.id} />
-          ))}
-        </Picker>
+        <Text style={styles.label}>Filtrer par membre :</Text>
+        <FlatList
+          horizontal
+          data={members}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => setSelectedUser(item.id === selectedUser ? '' : item.id)}
+              style={{
+                backgroundColor: selectedUser === item.id ? '#007AFF' : '#ccc',
+                padding: 6, borderRadius: 8, marginHorizontal: 4,
+              }}
+            >
+              <Text style={{ color: 'white' }}>{item.displayName}</Text>
+            </TouchableOpacity>
+            
+          )}
+
+          
+        />
       </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -186,10 +162,12 @@ export function TasksScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity onLongPress={() => openModal(item)}>
             <View style={styles.taskItem}>
-              <Checkbox value={item.completed} onValueChange={() => toggleCompleted(item)} />
+              <Checkbox value={item.status === 'done'} onValueChange={() => toggleCompleted(item)} />
               <View>
-                <Text style={[styles.taskTitle, item.completed && styles.completed]}>{item.title}</Text>
-                <Text style={styles.taskMeta}>Assignée à : {users.find(u => u.id === item.assignedTo)?.displayName || '—'}</Text>
+                <Text style={[styles.taskTitle, item.status === 'done' && styles.completed]}>{item.title}</Text>
+                <Text style={styles.taskMeta}>
+                  Assignée à : {item.assignedTo?.map(uid => members.find(u => u.id === uid)?.displayName).join(', ') || '—'}
+                </Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -210,25 +188,43 @@ export function TasksScreen() {
             style={styles.input}
           />
 
+          <Text style={styles.label}>Description :</Text>
+<TextInput
+  placeholder="Description de la tâche"
+  value={description}
+  onChangeText={setDescription}
+  style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+  multiline
+/>
+
+
           <Text style={styles.label}>Assigner à :</Text>
-          <Picker
-            selectedValue={assignedTo}
-            onValueChange={(v) => setAssignedTo(v)}>
-            <Picker.Item label="Choisir un membre" value="" />
-            {users.map(user => (
-              <Picker.Item key={user.id} label={user.displayName} value={user.id} />
+          <View style={styles.checkboxGroup}>
+            {members.map(user => (
+              <TouchableOpacity
+                key={user.id}
+                onPress={() => toggleUserAssignment(user.id)}
+                style={styles.checkboxRow}
+              >
+                <Checkbox value={assignedTo.includes(user.id)} onValueChange={() => toggleUserAssignment(user.id)} />
+                <Text style={styles.checkboxLabel}>{user.displayName}</Text>
+              </TouchableOpacity>
             ))}
-          </Picker>
+          </View>
 
           <Text style={styles.label}>Récurrence :</Text>
-          <Picker
-            selectedValue={recurrence}
-            onValueChange={(value) => setRecurrence(value)}>
-            <Picker.Item label="Aucune" value="none" />
-            <Picker.Item label="Tous les jours" value="daily" />
-            <Picker.Item label="Toutes les semaines" value="weekly" />
-            <Picker.Item label="Tous les mois" value="monthly" />
-          </Picker>
+          <View style={styles.checkboxGroup}>
+            {(['none', 'daily', 'weekly', 'monthly'] as const).map(option => (
+              <TouchableOpacity
+                key={option}
+                onPress={() => setRecurrence(option)}
+                style={styles.checkboxRow}
+              >
+                <Checkbox value={recurrence === option} onValueChange={() => setRecurrence(option)} />
+                <Text style={styles.checkboxLabel}>{recurrenceLabels[option]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.label}>Date limite :</Text>
           <TouchableOpacity onPress={() => setShowDatePicker(true)}>
@@ -261,77 +257,25 @@ export function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  taskTitle: {
-    fontSize: 16,
-  },
-  completed: {
-    textDecorationLine: 'line-through',
-    color: 'gray',
-  },
-  taskMeta: {
-    fontSize: 12,
-    color: '#666',
-  },
+  taskItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  taskTitle: { fontSize: 16 },
+  completed: { textDecorationLine: 'line-through', color: 'gray' },
+  taskMeta: { fontSize: 12, color: '#666' },
   addButton: {
-    position: 'absolute',
-    bottom: 30,
-    right: 30,
-    backgroundColor: '#007AFF',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'absolute', bottom: 30, right: 30,
+    backgroundColor: '#007AFF', width: 60, height: 60,
+    borderRadius: 30, justifyContent: 'center', alignItems: 'center',
   },
-  addButtonText: {
-    fontSize: 30,
-    color: '#fff',
-  },
-  modalContainer: {
-    padding: 20,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  label: {
-    marginTop: 10,
-    fontWeight: 'bold',
-  },
-  saveButton: {
-    backgroundColor: '#28a745',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  saveButtonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  dateButton: {
-    padding: 10,
-    backgroundColor: '#eee',
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  dateButtonText: {
-    color: '#333',
-  },
+  addButtonText: { fontSize: 30, color: '#fff' },
+  modalContainer: { padding: 20, flex: 1, justifyContent: 'center' },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 8, marginBottom: 12 },
+  label: { marginTop: 10, fontWeight: 'bold' },
+  saveButton: { backgroundColor: '#28a745', padding: 12, borderRadius: 8, marginTop: 20 },
+  saveButtonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  dateButton: { padding: 10, backgroundColor: '#eee', borderRadius: 8, marginTop: 10 },
+  dateButtonText: { color: '#333' },
+  checkboxGroup: { marginTop: 10 },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 5 },
+  checkboxLabel: { marginLeft: 10 },
 });

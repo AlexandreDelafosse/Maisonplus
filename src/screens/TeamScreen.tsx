@@ -163,10 +163,43 @@ export default function TeamScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: UserData }) => (
+  const removeFromTeam = async (uid: string) => {
+  try {
+    await updateDoc(doc(db, 'users', uid), { teamId: '' });
+    setUsers((prev) =>
+      prev.map((user) => (user.uid === uid ? { ...user, teamId: '' } : user))
+    );
+    Alert.alert('Succès', 'Utilisateur retiré de l’équipe.');
+  } catch (err) {
+    console.error(err);
+    Alert.alert('Erreur', "Impossible de retirer l'utilisateur.");
+  }
+};
+
+const leaveTeam = async () => {
+  if (!currentUid) return;
+  try {
+    await updateDoc(doc(db, 'users', currentUid), { teamId: '' });
+    setUsers((prev) =>
+      prev.map((user) => (user.uid === currentUid ? { ...user, teamId: '' } : user))
+    );
+    Alert.alert('Succès', 'Vous avez quitté l’équipe.');
+  } catch (err) {
+    console.error(err);
+    Alert.alert('Erreur', "Impossible de quitter l’équipe.");
+  }
+};
+
+
+const renderItem = ({ item }: { item: UserData }) => {
+  const isCurrentUser = item.uid === currentUid;
+
+  return (
     <View style={styles.userRow}>
       <View style={styles.info}>
-        <Text style={styles.name}>{item.displayName || '(Anonyme)'}</Text>
+        <Text style={styles.name}>
+          {item.displayName || '(Anonyme)'} {isCurrentUser ? '(moi)' : ''}
+        </Text>
         <Text style={styles.email}>{item.email}</Text>
         <Text style={styles.role}>🌟 {item.role}</Text>
         <Text style={styles.role}>
@@ -174,29 +207,28 @@ export default function TeamScreen() {
         </Text>
       </View>
 
-      {isAdmin && item.uid !== currentUid && (
-        <>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => toggleRole(item.uid, item.role)}>
-            <Text style={styles.buttonText}>
-              {item.role === 'admin' ? 'Rendre membre' : 'Nommer admin'}
-            </Text>
-          </TouchableOpacity>
+      {isAdmin && !isCurrentUser && item.teamId ? (
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => removeFromTeam(item.uid)}
+        >
+          <Text style={styles.removeButtonText}>Retirer de l’équipe</Text>
+        </TouchableOpacity>
+      ) : null}
 
-          <Picker
-            selectedValue={item.teamId || ''}
-            onValueChange={(teamId) => assignTeam(item.uid, teamId)}
-            style={{ width: 140 }}>
-            <Picker.Item label="Aucune équipe" value="" />
-            {Object.entries(teamsMap).map(([id, name]) => (
-              <Picker.Item key={id} label={name} value={id} />
-            ))}
-          </Picker>
-        </>
-      )}
+      {isCurrentUser && item.teamId ? (
+        <TouchableOpacity
+          style={styles.quitButton}
+          onPress={leaveTeam}
+        >
+          <Text style={styles.quitButtonText}>Quitter l’équipe</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
+};
+
+
 
   return (
     <View style={styles.container}>
@@ -248,14 +280,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  userRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    alignItems: 'center',
-  },
+userRow: {
+  flexDirection: 'column',
+  gap: 10,
+  paddingVertical: 14,
+  borderBottomWidth: 1,
+  borderColor: '#eee',
+},
+
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600' },
   email: { fontSize: 14, color: '#666' },
@@ -293,5 +325,31 @@ const styles = StyleSheet.create({
   inviteButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-  },
+  },removeButton: {
+  backgroundColor: '#FF3B30',
+  paddingVertical: 6,
+  paddingHorizontal: 10,
+  borderRadius: 8,
+  alignSelf: 'flex-start',
+  marginTop: 8,
+},
+removeButtonText: {
+  color: '#fff',
+  fontWeight: 'bold',
+  fontSize: 12,
+},
+quitButton: {
+  backgroundColor: '#FFA500',
+  paddingVertical: 6,
+  paddingHorizontal: 10,
+  borderRadius: 8,
+  alignSelf: 'flex-start',
+  marginTop: 8,
+},
+quitButtonText: {
+  color: '#fff',
+  fontWeight: 'bold',
+  fontSize: 12,
+},
+
 });

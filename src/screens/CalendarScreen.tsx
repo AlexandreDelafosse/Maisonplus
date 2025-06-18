@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { getAuth } from 'firebase/auth';
 import {
   View,
   Modal,
@@ -13,11 +14,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar } from 'react-native-big-calendar';
 import {
   collection,
+  query,
+  where,
   onSnapshot,
   addDoc,
   doc,
   updateDoc,
   deleteDoc,
+  getDoc,
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
@@ -28,10 +32,13 @@ interface EventType {
   description?: string;
   start: Date;
   end: Date;
+  createdByName?: string;
 }
 
 export default function CalendarScreen() {
   const [events, setEvents] = useState<EventType[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(null);
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -45,38 +52,64 @@ export default function CalendarScreen() {
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('10:00');
   const [endTime, setEndTime] = useState('11:00');
+  const [creatorName, setCreatorName] = useState('');
 
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  // 🔁 Récupère le teamId de l'utilisateur connecté
   useFocusEffect(
     useCallback(() => {
-      const unsubscribe = onSnapshot(collection(db, 'calendarevents'), (snapshot) => {
-        const fetched = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            title: data.title,
-            description: data.description || '',
-            start: data.start.toDate(),
-            end: data.end.toDate(),
-          };
-        });
+      const fetchTeamId = async () => {
+        if (!user) return;
+        const userRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userRef);
+        const data = snap.data();
+        setTeamId(data?.teamId || null);
+      };
+
+      fetchTeamId();
+    }, [user])
+  );
+
+  // 📅 Écoute les événements de la team
+  useFocusEffect(
+    useCallback(() => {
+      if (!teamId) return;
+
+      const q = query(collection(db, 'calendarevents'), where('teamId', '==', teamId));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title,
+          description: data.description || '',
+          start: data.start.toDate(),
+          end: data.end.toDate(),
+          createdByName: data.createdByName || '',
+        };
+      });
         setEvents(fetched);
       });
 
       return () => unsubscribe();
-    }, [])
+    }, [teamId])
   );
 
-  const handlePressCell = (date: Date) => {
-    setSelectedDate(date);
-    setStartDate(date);
-    setEndDate(date);
-    setStartTime('10:00');
-    setEndTime('11:00');
-    setNewTitle('');
-    setDescription('');
-    setIsEditing(false);
-    setModalVisible(true);
-  };
+const handlePressCell = (date: Date) => {
+  setSelectedDate(date);
+  setStartDate(date);
+  setEndDate(date);
+  setStartTime('10:00');
+  setEndTime('11:00');
+  setNewTitle('');
+  setDescription('');
+  setCreatorName(''); // ✅ Réinitialise le créateur
+  setIsEditing(false);
+  setModalVisible(true);
+};
+
 
   const handlePressEvent = (event: EventType) => {
     setSelectedDate(event.start);
@@ -89,6 +122,8 @@ export default function CalendarScreen() {
     setIsEditing(true);
     setEditingId(event.id);
     setModalVisible(true);
+    setCreatorName(event.createdByName || '');
+
   };
 
   const parseTime = (baseDate: Date, time: string): Date => {
@@ -99,7 +134,7 @@ export default function CalendarScreen() {
   };
 
   const submitEvent = async () => {
-    if (!startDate || !endDate || !newTitle.trim()) return;
+    if (!startDate || !endDate || !newTitle.trim() || !teamId) return;
 
     const start = parseTime(startDate, startTime);
     const end = parseTime(endDate, endTime);
@@ -119,6 +154,9 @@ export default function CalendarScreen() {
         description,
         start,
         end,
+        teamId,
+        createdByUid: user?.uid || '',
+        createdByName: user?.displayName || user?.email || 'Inconnu',
       });
     }
 
@@ -225,10 +263,16 @@ export default function CalendarScreen() {
               keyboardType="numeric"
             />
 
-            <TouchableOpacity style={styles.addButton} onPress={submitEvent}>
-              <Text style={styles.addText}>
-                {isEditing ? 'Modifier' : 'Ajouter'}
+            {creatorName ? (
+              <Text style={{ fontStyle: 'italic', marginBottom: 8 }}>
+                Créé par : {creatorName}
               </Text>
+            ) : null}
+
+
+            <TouchableOpacity style={styles.addButton} onPress={submitEvent}>
+            
+              <Text style={styles.addText}>{isEditing ? 'Modifier' : 'Ajouter'}</Text>
             </TouchableOpacity>
 
             {isEditing && (

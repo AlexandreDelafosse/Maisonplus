@@ -8,79 +8,76 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { getAuth, signOut, updateProfile } from 'firebase/auth';
+import { getAuth, updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/types';
 
 export default function ProfileScreen() {
   const auth = getAuth();
   const user = auth.currentUser;
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-useEffect(() => {
-  if (!user) return;
+  useEffect(() => {
+    if (!user) return;
 
-  const userRef = doc(db, 'users', user.uid);
+    const userRef = doc(db, 'users', user.uid);
 
-  const fetchData = async () => {
-    try {
-      const docSnap = await getDoc(userRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setFirstName(data.firstName || '');
-        setLastName(data.lastName || '');
-        setRole(data.role || '');
+    const fetchData = async () => {
+      try {
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setFirstName(data.firstName || '');
+          setLastName(data.lastName || '');
+          setRole(data.role || '');
 
-        // 👇 Affiche une alerte si le profil n’est pas complété
-        if (data.needsProfileCompletion) {
-          Alert.alert(
-            "Bienvenue !",
-            "Veuillez compléter votre profil pour finaliser l'inscription."
-          );
+          if (data.needsProfileCompletion) {
+            Alert.alert(
+              "Bienvenue !",
+              "Veuillez compléter votre profil pour finaliser l'inscription."
+            );
+          }
         }
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Erreur chargement profil :', err);
+        Alert.alert('Erreur', "Impossible de charger les données de profil.");
       }
-      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [user]);
+
+  const saveProfile = async () => {
+    if (!user) return;
+
+    const userRef = doc(db, 'users', user.uid);
+    const newDisplayName = `${firstName} ${lastName}`.trim();
+
+    try {
+      await updateProfile(user, { displayName: newDisplayName });
+      await updateDoc(userRef, {
+        firstName,
+        lastName,
+        displayName: newDisplayName,
+        email: user.email || '',
+        uid: user.uid,
+        needsProfileCompletion: false,
+      });
+      Alert.alert('Succès', 'Profil mis à jour avec succès.');
     } catch (err) {
-      console.error('Erreur chargement profil :', err);
-      Alert.alert('Erreur', "Impossible de charger les données de profil.");
+      console.error('Erreur MAJ profil :', err);
+      Alert.alert('Erreur', 'Impossible de mettre à jour le profil.');
     }
   };
-
-  fetchData();
-}, [user]);
-
-
-const saveProfile = async () => {
-  if (!user) return;
-
-  const userRef = doc(db, 'users', user.uid);
-  const newDisplayName = `${firstName} ${lastName}`.trim();
-
-  try {
-    console.log(">> Updating displayName to:", newDisplayName);
-
-    await updateProfile(user, { displayName: newDisplayName });
-
-await updateDoc(userRef, {
-  firstName,
-  lastName,
-  displayName: newDisplayName,
-  email: user.email || '',
-  uid: user.uid,
-  needsProfileCompletion: false, // ✅ on supprime ce flag ici
-});
-
-
-    Alert.alert('Succès', 'Profil mis à jour avec succès.');
-  } catch (err) {
-    console.error('Erreur MAJ profil :', err);
-    Alert.alert('Erreur', 'Impossible de mettre à jour le profil.');
-  }
-};
 
   const changeRole = async () => {
     if (!user) return;
@@ -96,12 +93,8 @@ await updateDoc(userRef, {
     }
   };
 
-  const logout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      Alert.alert('Erreur', 'Impossible de se déconnecter.');
-    }
+  const goToTeamSelection = () => {
+    navigation.navigate('SelectTeam');
   };
 
   if (isLoading) {
@@ -130,9 +123,7 @@ await updateDoc(userRef, {
         style={styles.input}
       />
 
-      
       <Text style={styles.label}>Nom d'affichage : {`${firstName} ${lastName}`.trim()}</Text>
-
 
       <TouchableOpacity style={styles.button} onPress={saveProfile}>
         <Text style={styles.buttonText}>Sauvegarder</Text>
@@ -142,8 +133,8 @@ await updateDoc(userRef, {
         <Text style={styles.buttonText}>Changer de rôle</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f' }]} onPress={logout}>
-        <Text style={styles.buttonText}>Se déconnecter</Text>
+      <TouchableOpacity style={[styles.button, { backgroundColor: '#d9534f' }]} onPress={goToTeamSelection}>
+        <Text style={styles.buttonText}>Changer d'équipe</Text>
       </TouchableOpacity>
     </View>
   );
