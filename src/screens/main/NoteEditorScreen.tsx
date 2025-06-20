@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { NotesStackParamList } from '../navigation/NotesStack';
-import { db } from '../services/firebaseConfig';
+import { NotesStackParamList } from '../../navigation/NotesStack';
+import { db } from '../../services/firebaseConfig';
 import {
   collection,
   addDoc,

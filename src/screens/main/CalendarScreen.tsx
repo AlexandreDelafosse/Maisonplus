@@ -23,7 +23,7 @@ import {
   deleteDoc,
   getDoc,
 } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 
 interface EventType {

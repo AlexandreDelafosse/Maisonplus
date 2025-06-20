@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 import { getAuth, updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList } from '../../navigation/types';
 
 export default function ProfileScreen() {
   const auth = getAuth();

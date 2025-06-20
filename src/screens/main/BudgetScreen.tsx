@@ -5,11 +5,11 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
-import { useCurrentTeam } from '../hooks/useCurrentTeam';
-import { useTeamMembers } from '../hooks/useTeamMembers';
-import type { Member } from '../hooks/useTeamMembers';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+import { useTeamMembers } from '../../hooks/useTeamMembers';
+import type { Member } from '../../hooks/useTeamMembers';
 import { Dimensions } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 

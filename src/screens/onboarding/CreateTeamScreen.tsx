@@ -4,12 +4,12 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
-import { PACKS } from '../utils/packs';
+import { PACKS } from '../../utils/packs';
 import uuid from 'react-native-uuid';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList } from '../../navigation/types';
 
 export default function CreateTeamScreen() {
   const [teamName, setTeamName] = useState('');

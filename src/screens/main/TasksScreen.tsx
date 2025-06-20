@@ -7,10 +7,10 @@ import {
 import { getAuth } from 'firebase/auth';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { useCurrentTeam } from '../hooks/useCurrentTeam';
-import { TeamTask, useTeamTasks } from '../hooks/useTeamTasks';
-import { useTeamMembers } from '../hooks/useTeamMembers';
-import Checkbox from '../components/Checkbox';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+import { TeamTask, useTeamTasks } from '../../hooks/useTeamTasks';
+import { useTeamMembers } from '../../hooks/useTeamMembers';
+import Checkbox from '../../components/Checkbox';
 
 const recurrenceLabels: Record<'none' | 'daily' | 'weekly' | 'monthly', string> = {
   none: 'Aucune',

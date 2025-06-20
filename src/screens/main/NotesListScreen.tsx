@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { NotesStackParamList } from '../navigation/NotesStack';
+import { NotesStackParamList } from '../../navigation/NotesStack';
 import { getAuth } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 
 type Note = {
   author: string;

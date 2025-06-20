@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, db } from '../services/firebaseConfig';
+import { auth, db } from '../../services/firebaseConfig';
 import { setDoc, doc } from 'firebase/firestore';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/types';
+import { RootStackParamList } from '../../navigation/types';
 
 export default function RegisterScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Register'>) {
   const [email, setEmail] = useState('');

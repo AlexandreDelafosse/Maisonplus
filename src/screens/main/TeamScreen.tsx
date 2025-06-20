@@ -17,10 +17,10 @@ import {
   where,
   addDoc,
 } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { db } from '../../services/firebaseConfig';
 import { getAuth, fetchSignInMethodsForEmail } from 'firebase/auth';
 import { Picker } from '@react-native-picker/picker';
-import { sendEmailInvitation } from '../services/email';
+import { sendEmailInvitation } from '../../services/email';
 
 type UserData = {
   uid: string;

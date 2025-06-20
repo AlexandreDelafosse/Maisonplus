@@ -8,13 +8,13 @@ import { UserProvider } from '../context/UserContext';
 import { linking } from '../../App';
 import type { RootStackParamList } from './types';
 
-import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/RegisterScreen';
-import HomeScreen from '../screens/HomeScreen';
+import LoginScreen from '../screens/auth/LoginScreen';
+import RegisterScreen from '../screens/auth/RegisterScreen';
+import HomeScreen from '../screens/main/HomeScreen';
 import MainTabs from './MainTabs';
-import InvitationScreen from '../screens/InvitationScreen';
-import CreateTeamScreen from '../screens/CreateTeamScreen';
-import SelectTeamScreen from '../screens/SelectTeamScreen';
+import InvitationScreen from '../screens/invitation/InvitationScreen';
+import CreateTeamScreen from '../screens/onboarding/CreateTeamScreen';
+import SelectTeamScreen from '../screens/onboarding/SelectTeamScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

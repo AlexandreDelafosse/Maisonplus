@@ -1,8 +1,8 @@
 import React, { useContext } from 'react';
 import { View, Text, Button } from 'react-native';
 import { signOut } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
-import { AuthContext } from '../context/AuthContext';
+import { auth } from '../../services/firebaseConfig';
+import { AuthContext } from '../../context/AuthContext';
 
 export default function HomeScreen() {
   const { user } = useContext(AuthContext);

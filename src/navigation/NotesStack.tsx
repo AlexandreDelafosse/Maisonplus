@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import NotesListScreen from '../screens/NotesListScreen';
-import NoteEditorScreen from '../screens/NoteEditorScreen';
+import NotesListScreen from '../screens/main/NotesListScreen';
+import NoteEditorScreen from '../screens/main/NoteEditorScreen';
 
 export type NotesStackParamList = {
   NotesList: undefined;

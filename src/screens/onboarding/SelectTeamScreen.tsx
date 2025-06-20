@@ -2,19 +2,18 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
 } from 'react-native';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
-import { useNavigation } from '@react-navigation/native';
-import { useCurrentTeam } from '../hooks/useCurrentTeam';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList } from '../../navigation/types';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SelectTeam'>;
 
 export default function SelectTeamScreen({ navigation }: Props) {
   const [teams, setTeams] = useState<any[]>([]);
-  const { setTeamId } = useCurrentTeam();
+  const { setTeamId, setTeamData } = useCurrentTeam();
   const user = getAuth().currentUser;
 
   useEffect(() => {
@@ -26,7 +25,7 @@ export default function SelectTeamScreen({ navigation }: Props) {
       const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       if (results.length === 0) {
-        navigation.replace('CreateTeam'); // 👈 Redirige si aucune team
+        navigation.replace('CreateTeam'); // Redirige si aucune team
         return;
       }
 
@@ -36,9 +35,20 @@ export default function SelectTeamScreen({ navigation }: Props) {
     fetchTeams();
   }, []);
 
-  const handleSelect = (teamId: string) => {
+  const handleSelect = async (teamId: string) => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (currentUser) {
+      // Sauvegarde du teamId dans Firestore
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        teamId,
+      });
+    }
+
     setTeamId(teamId);
-    navigation.replace('Main'); // 👈 Redirige vers app principale
+    setTeamData(null); // réinitialise pour forcer le rechargement
+    navigation.replace('Main');
   };
 
   return (
@@ -55,12 +65,13 @@ export default function SelectTeamScreen({ navigation }: Props) {
         )}
       />
 
-      {/* 👇 Bouton pour ajouter une team manuellement */}
       <TouchableOpacity
         style={[styles.teamItem, { backgroundColor: '#007AFF' }]}
         onPress={() => navigation.navigate('CreateTeam')}
       >
-        <Text style={[styles.teamText, { color: '#fff', textAlign: 'center' }]}>+ Créer une équipe</Text>
+        <Text style={[styles.teamText, { color: '#fff', textAlign: 'center' }]}>
+          + Créer une équipe
+        </Text>
       </TouchableOpacity>
     </View>
   );

@@ -8,34 +8,45 @@ export function useCurrentTeam() {
   const [teamData, setTeamData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchTeam = async () => {
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
+useEffect(() => {
+  const fetchTeam = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
 
-      if (!currentUser) {
-        setTeamId(null);
-        setLoading(false);
-        return;
-      }
+    if (!currentUser) {
+      setTeamId(null);
+      setTeamData(null);
+      setLoading(false);
+      return;
+    }
 
+    let finalTeamId = teamId;
+
+    // 🧠 Si pas de teamId fourni par props, on va le chercher dans Firestore
+    if (!finalTeamId) {
       const userRef = doc(db, 'users', currentUser.uid);
       const userSnap = await getDoc(userRef);
-      const teamId = userSnap.data()?.teamId;
+      finalTeamId = userSnap.data()?.teamId || null;
+    }
 
-      if (teamId) {
-        setTeamId(teamId);
-        const teamSnap = await getDoc(doc(db, 'teams', teamId));
-        if (teamSnap.exists()) {
-          setTeamData(teamSnap.data());
-        }
+    if (finalTeamId) {
+      const teamSnap = await getDoc(doc(db, 'teams', finalTeamId));
+      if (teamSnap.exists()) {
+        setTeamData(teamSnap.data());
+        setTeamId(finalTeamId);
+      } else {
+        setTeamData(null);
       }
+    } else {
+      setTeamData(null);
+    }
 
-      setLoading(false);
-    };
+    setLoading(false);
+  };
 
-    fetchTeam();
-  }, []);
+  fetchTeam();
+}, [teamId]); // 👈 écoute les changements de teamId
+
 
   return {
     teamId,
