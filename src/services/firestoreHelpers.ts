@@ -121,7 +121,8 @@ export class TeamManager {
         email: data.email,
         teams: data.teams || [],
         currentTeam: data.currentTeam || null,
-        createdAt: data.createdAt?.toDate(),
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+
         lastActive: data.lastActive?.toDate()
       };
     } catch (error) {
@@ -361,5 +362,10 @@ export const useCurrentTeam = () => {
     return () => unsubscribe();
   }, [user]);
 
-  return { currentTeam, loading };
+  return {
+  currentTeam,
+  loading,
+  teamId: currentTeam?.id ?? null,
+};
+
 };

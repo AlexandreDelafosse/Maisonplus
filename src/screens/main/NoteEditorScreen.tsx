@@ -25,6 +25,8 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+
 
 type NoteEditorScreenRouteProp = RouteProp<NotesStackParamList, 'NoteEditor'>;
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NoteEditor'>;
@@ -38,6 +40,8 @@ export default function NoteEditorScreen() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { teamId } = useCurrentTeam();
+
 
   const auth = getAuth();
   const user = auth.currentUser;
@@ -98,15 +102,17 @@ export default function NoteEditorScreen() {
           updatedAt: serverTimestamp(),
         });
       } else {
-        await addDoc(collection(db, 'notes'), {
-          title,
-          content,
-          tags: tagArray,
-          userId: user.uid,
-          author: user.displayName || '',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+          await addDoc(collection(db, 'notes'), {
+            title,
+            content,
+            tags: tagArray,
+            userId: user.uid,
+            author: user.displayName || '',
+            teamId, // 🧩 Ajout crucial
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+
       }
 
       navigation.goBack();

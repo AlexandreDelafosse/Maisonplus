@@ -8,66 +8,38 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NotesStackParamList } from '../../navigation/NotesStack';
-import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+import { useTeamNotes } from '../../hooks/useTeamNotes'; // ✅ Hook custom
+import { useIsFocused } from '@react-navigation/native';
+import { Note } from '../../navigation/types';
 
-type Note = {
-  author: string;
-  id: string;
-  title: string;
-  content: string;
-  tags?: string[];
-  userId: string;
-  teamId: string;
-};
 
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NotesList'>;
 
 export default function NotesListScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const isFocused = useIsFocused();
   const auth = getAuth();
   const currentUser = auth.currentUser;
-  const { teamId } = useCurrentTeam();
+  const isFocused = useIsFocused();
 
-  const [notes, setNotes] = useState<Note[]>([]);
+  const allNotes = useTeamNotes(); // ✅ notes en temps réel via hook
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'alpha'>('recent');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  const loadNotes = async () => {
-    if (!currentUser || !teamId) return;
-
-    try {
-      const q = query(collection(db, 'notes'), where('teamId', '==', teamId));
-      const querySnapshot = await getDocs(q);
-
-      const loadedNotes: Note[] = querySnapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as Note[];
-
-      setNotes(loadedNotes);
-    } catch (err) {
-      Alert.alert('Erreur', 'Impossible de charger les notes.');
-      console.error(err);
-    }
-  };
+  const [notes, setNotes] = useState<Note[]>([]);
 
   useEffect(() => {
     if (isFocused) {
-      loadNotes();
+      setNotes(allNotes); // ⚡️ met à jour dès qu’on revient
     }
-  }, [isFocused, teamId]);
+  }, [isFocused, allNotes]);
 
-  const allTags = Array.from(
-    new Set(notes.flatMap((note) => note.tags || []))
-  );
+  const allTags = Array.from(new Set(notes.flatMap((note) => note.tags || [])));
 
   const filteredNotes = notes
     .filter((note) =>
@@ -83,8 +55,8 @@ export default function NotesListScreen() {
 
   const deleteNote = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'notes', id));
-      setNotes((prev) => prev.filter((n) => n.id !== id));
+      await deleteDoc(doc(require('../../services/firebaseConfig').db, 'notes', id));
+      setNotes((prev) => prev.filter((n) => n.id !== id)); // Optimiste
     } catch (err) {
       Alert.alert('Erreur', 'Impossible de supprimer la note.');
       console.error(err);
@@ -145,7 +117,6 @@ export default function NotesListScreen() {
               {Array.isArray(item.tags) && item.tags.length > 0 && (
                 <Text style={styles.tags}>#{item.tags.join('  #')}</Text>
               )}
-
               <Text style={styles.author}>✍️ {item.author || 'Inconnu'}</Text>
             </TouchableOpacity>
 
@@ -244,12 +215,11 @@ const styles = StyleSheet.create({
     right: 30,
   },
   author: {
-  fontSize: 12,
-  color: '#666',
-  marginTop: 4,
-  fontStyle: 'italic',
-},
-
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   addButtonText: { color: 'white', fontWeight: 'bold' },
   title: { fontSize: 16 },
   tags: { fontSize: 12, color: '#888', marginTop: 4 },
