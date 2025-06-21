@@ -1,4 +1,3 @@
-// ../src/screens/NotesListScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -12,9 +11,10 @@ import {
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NotesStackParamList } from '../../navigation/NotesStack';
-import { getAuth } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
+import { getAuth } from 'firebase/auth';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
 
 type Note = {
   author: string;
@@ -23,24 +23,28 @@ type Note = {
   content: string;
   tags?: string[];
   userId: string;
+  teamId: string;
 };
 
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NotesList'>;
 
 export default function NotesListScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const isFocused = useIsFocused();
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  const { teamId } = useCurrentTeam();
+
   const [notes, setNotes] = useState<Note[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'alpha'>('recent');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const isFocused = useIsFocused();
-  const user = getAuth().currentUser;
 
   const loadNotes = async () => {
-    if (!user) return;
+    if (!currentUser || !teamId) return;
 
     try {
-      const q = query(collection(db, 'notes'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'notes'), where('teamId', '==', teamId));
       const querySnapshot = await getDocs(q);
 
       const loadedNotes: Note[] = querySnapshot.docs.map((docSnap) => ({
@@ -59,7 +63,7 @@ export default function NotesListScreen() {
     if (isFocused) {
       loadNotes();
     }
-  }, [isFocused]);
+  }, [isFocused, teamId]);
 
   const allTags = Array.from(
     new Set(notes.flatMap((note) => note.tags || []))
@@ -120,10 +124,7 @@ export default function NotesListScreen() {
             <TouchableOpacity
               key={tag}
               onPress={() => setSelectedTag(tag === selectedTag ? null : tag)}
-              style={[
-                styles.tagButton,
-                selectedTag === tag && styles.activeTagButton,
-              ]}
+              style={[styles.tagButton, selectedTag === tag && styles.activeTagButton]}
             >
               <Text style={styles.tagText}>#{tag}</Text>
             </TouchableOpacity>
@@ -134,30 +135,27 @@ export default function NotesListScreen() {
       <FlatList
         data={filteredNotes}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const safeTags = item.tags ?? [];
-          return (
-            <View style={styles.noteRow}>
-              <TouchableOpacity
-                style={styles.noteContent}
-                onPress={() => navigation.navigate('NoteEditor', { noteId: item.id })}
-              >
-                <Text style={styles.title}>{item.title}</Text>
-                {safeTags.length > 0 && (
-                  <Text style={styles.tags}>#{safeTags.join('  #')}</Text>
-                )}
+        renderItem={({ item }) => (
+          <View style={styles.noteRow}>
+            <TouchableOpacity
+              style={styles.noteContent}
+              onPress={() => navigation.navigate('NoteEditor', { noteId: item.id })}
+            >
+              <Text style={styles.title}>{item.title}</Text>
+              {Array.isArray(item.tags) && item.tags.length > 0 && (
+                <Text style={styles.tags}>#{item.tags.join('  #')}</Text>
+              )}
 
-                <Text style={styles.author}>✍️ {item.author || 'Inconnu'}</Text>
-              </TouchableOpacity>
+              <Text style={styles.author}>✍️ {item.author || 'Inconnu'}</Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => deleteNote(item.id)}>
-                <Text style={styles.trashIcon}>🗑️</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        }}
+            <TouchableOpacity onPress={() => deleteNote(item.id)}>
+              <Text style={styles.trashIcon}>🗑️</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         ListEmptyComponent={
-          <Text style={styles.empty}>Aucune note ne correspond à la recherche.</Text>
+          <Text style={styles.empty}>Aucune note pour cette équipe.</Text>
         }
       />
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, FlatList, StyleSheet,
+  View, Text, TouchableOpacity, FlatList, StyleSheet, Alert,
 } from 'react-native';
-import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,38 +17,53 @@ export default function SelectTeamScreen({ navigation }: Props) {
   const user = getAuth().currentUser;
 
   useEffect(() => {
-    const fetchTeams = async () => {
-      if (!user) return;
-
-      const q = query(collection(db, 'teams'), where('members', 'array-contains', user.uid));
-      const snapshot = await getDocs(q);
-      const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      if (results.length === 0) {
-        navigation.replace('CreateTeam'); // Redirige si aucune team
-        return;
-      }
-
-      setTeams(results);
-    };
-
     fetchTeams();
   }, []);
 
-  const handleSelect = async (teamId: string) => {
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
+  const fetchTeams = async () => {
+    if (!user) return;
 
+    const q = query(collection(db, 'teams'), where('members', 'array-contains', user.uid));
+    const snapshot = await getDocs(q);
+    const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    if (results.length === 0) {
+      navigation.replace('CreateTeam');
+      return;
+    }
+
+    setTeams(results);
+  };
+
+  const handleSelect = async (teamId: string) => {
+    const currentUser = getAuth().currentUser;
     if (currentUser) {
-      // Sauvegarde du teamId dans Firestore
       await updateDoc(doc(db, 'users', currentUser.uid), {
         teamId,
       });
     }
 
     setTeamId(teamId);
-    setTeamData(null); // réinitialise pour forcer le rechargement
+    setTeamData(null);
     navigation.replace('Main');
+  };
+
+  const handleDelete = (teamId: string, teamName: string) => {
+    Alert.alert(
+      'Supprimer cette équipe ?',
+      `Es-tu sûr de vouloir supprimer l'équipe "${teamName}" ? Cette action est irréversible.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteDoc(doc(db, 'teams', teamId));
+            fetchTeams(); // Recharge les équipes
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -59,9 +74,14 @@ export default function SelectTeamScreen({ navigation }: Props) {
         data={teams}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.teamItem} onPress={() => handleSelect(item.id)}>
-            <Text style={styles.teamText}>{item.name}</Text>
-          </TouchableOpacity>
+          <View style={styles.teamRow}>
+            <TouchableOpacity style={styles.teamItem} onPress={() => handleSelect(item.id)}>
+              <Text style={styles.teamText}>{item.name}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDelete(item.id, item.name)}>
+              <Text style={styles.deleteText}>🗑</Text>
+            </TouchableOpacity>
+          </View>
         )}
       />
 
@@ -78,15 +98,26 @@ export default function SelectTeamScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1, padding: 20, paddingTop: 75 ,},
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   teamItem: {
     padding: 16,
     backgroundColor: '#f0f0f0',
     borderRadius: 8,
-    marginBottom: 12,
   },
   teamText: {
     fontSize: 16,
+  },
+  deleteText: {
+    color: 'red',
+    fontSize: 20,
+    marginLeft: 10,
+    padding: 10,
   },
 });

@@ -7,126 +7,63 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import {
-  collection,
-  getDocs,
-  updateDoc,
   doc,
+  getDoc,
+  updateDoc,
+  collection,
   query,
   where,
+  getDocs,
   addDoc,
 } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
 import { getAuth, fetchSignInMethodsForEmail } from 'firebase/auth';
-import { Picker } from '@react-native-picker/picker';
+import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+import { db } from '../../services/firebaseConfig';
 import { sendEmailInvitation } from '../../services/email';
 
-type UserData = {
-  uid: string;
-  email: string;
-  role: 'admin' | 'member';
-  displayName: string;
-  teamId?: string;
-};
-
 export default function TeamScreen() {
-  const [users, setUsers] = useState<UserData[]>([]);
-  const [teamsMap, setTeamsMap] = useState<{ [key: string]: string }>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteFirstName, setInviteFirstName] = useState('');
+  const { teamId, teamData, setLoading, loading } = useCurrentTeam();
   const auth = getAuth();
   const currentUser = auth.currentUser;
-  const currentUid = currentUser?.uid;
+  const [users, setUsers] = useState<any[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteFirstName, setInviteFirstName] = useState('');
 
-  const fetchUsers = async () => {
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      const loaded: UserData[] = [];
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        loaded.push({
-          uid: docSnap.id,
-          email: data.email || '',
-          displayName: data.displayName || '',
-          role: data.role || 'member',
-          teamId: data.teamId || '',
-        });
-      });
-      setUsers(loaded);
-    } catch (err) {
-      Alert.alert('Erreur', "Impossible de charger les membres.");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchTeams = async () => {
-    try {
-      const snap = await getDocs(collection(db, 'teams'));
-      const map: { [key: string]: string } = {};
-      snap.forEach((doc) => {
-        const name = doc.data().name;
-        map[doc.id] = name;
-      });
-      setTeamsMap(map);
-    } catch (err) {
-      Alert.alert('Erreur', "Impossible de charger les équipes.");
-      console.error(err);
-    }
-  };
+  const isAdmin = teamData?.admins?.includes(currentUser?.uid);
 
   useEffect(() => {
-    fetchUsers();
-    fetchTeams();
-  }, []);
+    const fetchMembers = async () => {
+      if (!teamId || !teamData?.members) return;
 
-  const getCurrentUserRole = () => {
-    return users.find((u) => u.uid === currentUid)?.role;
-  };
+      setLoading(true);
 
-  const currentTeamId = users.find((u) => u.uid === currentUid)?.teamId || '';
-  const currentTeamName = teamsMap[currentTeamId] || 'Aucune équipe';
-  const isAdmin = getCurrentUserRole() === 'admin';
+      try {
+        const snapshots = await Promise.all(
+          teamData.members.map((uid: string) => getDoc(doc(db, 'users', uid)))
+        );
 
-  const toggleRole = async (uid: string, currentRole: string) => {
-    const newRole = currentRole === 'admin' ? 'member' : 'admin';
-    try {
-      await updateDoc(doc(db, 'users', uid), { role: newRole });
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.uid === uid ? { ...user, role: newRole } : user
-        )
-      );
-    } catch (err) {
-      Alert.alert('Erreur', "Impossible de modifier le rôle.");
-      console.error(err);
-    }
-  };
+        const loaded = snapshots
+          .filter((snap) => snap.exists())
+          .map((snap) => ({ uid: snap.id, ...snap.data() }));
 
-  const assignTeam = async (uid: string, teamId: string) => {
-    try {
-      await updateDoc(doc(db, 'users', uid), { teamId });
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.uid === uid ? { ...user, teamId } : user
-        )
-      );
-    } catch (err) {
-      Alert.alert('Erreur', "Impossible de changer l'équipe.");
-    }
-  };
+        setUsers(loaded);
+      } catch (err) {
+        Alert.alert('Erreur', 'Impossible de charger les membres.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMembers();
+  }, [teamId, teamData]);
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
-    if (!email) return;
-
-    if (!currentTeamId) {
-      Alert.alert('Erreur', 'Aucune équipe sélectionnée pour l’ajout.');
-      return;
-    }
+    if (!email || !teamId) return;
 
     try {
       const methods = await fetchSignInMethodsForEmail(auth, email);
@@ -134,24 +71,19 @@ export default function TeamScreen() {
       if (methods.length > 0) {
         const q = query(collection(db, 'users'), where('email', '==', email));
         const snap = await getDocs(q);
-
         if (!snap.empty) {
           const userDoc = snap.docs[0];
-          await updateDoc(doc(db, 'users', userDoc.id), { teamId: currentTeamId });
+          await updateDoc(doc(db, 'users', userDoc.id), { teamId });
           Alert.alert('Succès', 'Utilisateur ajouté à l’équipe.');
-          fetchUsers();
-        } else {
-          Alert.alert('Erreur', "Cet utilisateur n'a pas encore de profil.");
         }
       } else {
-        const docRef = await addDoc(collection(db, 'invitations'), {
+        const invitationRef = await addDoc(collection(db, 'invitations'), {
           email,
-          teamId: currentTeamId,
-          status: 'pending',
+          teamId,
           invitedAt: new Date().toISOString(),
+          status: 'pending',
         });
-
-        await sendEmailInvitation(email, inviteFirstName || 'inconnu', currentTeamName, docRef.id);
+        await sendEmailInvitation(email, inviteFirstName || 'inconnu', teamData.name, invitationRef.id);
         Alert.alert('Invitation envoyée', 'Un e-mail a été envoyé à cet utilisateur.');
       }
 
@@ -159,86 +91,68 @@ export default function TeamScreen() {
       setInviteFirstName('');
     } catch (err) {
       console.error(err);
-      Alert.alert('Erreur', "Impossible d'inviter cet utilisateur.");
+      Alert.alert('Erreur', 'Impossible d’inviter cet utilisateur.');
     }
   };
 
   const removeFromTeam = async (uid: string) => {
-  try {
-    await updateDoc(doc(db, 'users', uid), { teamId: '' });
-    setUsers((prev) =>
-      prev.map((user) => (user.uid === uid ? { ...user, teamId: '' } : user))
-    );
-    Alert.alert('Succès', 'Utilisateur retiré de l’équipe.');
-  } catch (err) {
-    console.error(err);
-    Alert.alert('Erreur', "Impossible de retirer l'utilisateur.");
-  }
-};
+    try {
+      await updateDoc(doc(db, 'users', uid), { teamId: '' });
+      setUsers((prev) => prev.filter((u) => u.uid !== uid));
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Erreur', 'Impossible de retirer ce membre.');
+    }
+  };
 
-const leaveTeam = async () => {
-  if (!currentUid) return;
-  try {
-    await updateDoc(doc(db, 'users', currentUid), { teamId: '' });
-    setUsers((prev) =>
-      prev.map((user) => (user.uid === currentUid ? { ...user, teamId: '' } : user))
-    );
-    Alert.alert('Succès', 'Vous avez quitté l’équipe.');
-  } catch (err) {
-    console.error(err);
-    Alert.alert('Erreur', "Impossible de quitter l’équipe.");
-  }
-};
+  const leaveTeam = async () => {
+    if (!currentUser) return;
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), { teamId: '' });
+      Alert.alert('Succès', 'Vous avez quitté l’équipe.');
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Erreur', 'Impossible de quitter l’équipe.');
+    }
+  };
 
+  const renderItem = ({ item }: { item: any }) => {
+    const isCurrentUser = item.uid === currentUser?.uid;
 
-const renderItem = ({ item }: { item: UserData }) => {
-  const isCurrentUser = item.uid === currentUid;
+    return (
+      <View style={styles.userRow}>
+        <View>
+          <Text style={styles.name}>
+            {item.displayName || '(Anonyme)'} {isCurrentUser ? '(moi)' : ''}
+          </Text>
+          <Text style={styles.email}>{item.email}</Text>
+          <Text style={styles.role}>🔰 {item.role || 'membre'}</Text>
+        </View>
 
-  return (
-    <View style={styles.userRow}>
-      <View style={styles.info}>
-        <Text style={styles.name}>
-          {item.displayName || '(Anonyme)'} {isCurrentUser ? '(moi)' : ''}
-        </Text>
-        <Text style={styles.email}>{item.email}</Text>
-        <Text style={styles.role}>🌟 {item.role}</Text>
-        <Text style={styles.role}>
-          🏷️ {item.teamId && teamsMap[item.teamId] ? teamsMap[item.teamId] : 'Aucune équipe'}
-        </Text>
+        {!isCurrentUser && isAdmin && (
+          <TouchableOpacity style={styles.removeButton} onPress={() => removeFromTeam(item.uid)}>
+            <Text style={styles.removeButtonText}>Retirer</Text>
+          </TouchableOpacity>
+        )}
+
+        {isCurrentUser && (
+          <TouchableOpacity style={styles.quitButton} onPress={leaveTeam}>
+            <Text style={styles.quitButtonText}>Quitter</Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      {isAdmin && !isCurrentUser && item.teamId ? (
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => removeFromTeam(item.uid)}
-        >
-          <Text style={styles.removeButtonText}>Retirer de l’équipe</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {isCurrentUser && item.teamId ? (
-        <TouchableOpacity
-          style={styles.quitButton}
-          onPress={leaveTeam}
-        >
-          <Text style={styles.quitButtonText}>Quitter l’équipe</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-};
-
-
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>👥 {currentTeamName}</Text>
+      <Text style={styles.title}>👥 {teamData?.name || 'Équipe'}</Text>
 
       {isAdmin && (
         <View style={styles.inviteContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Prénom de l'invité"
+            placeholder="Prénom de l’invité"
             value={inviteFirstName}
             onChangeText={setInviteFirstName}
           />
@@ -256,16 +170,14 @@ const renderItem = ({ item }: { item: UserData }) => {
         </View>
       )}
 
-      {isLoading ? (
-        <Text>Chargement...</Text>
+      {loading ? (
+        <ActivityIndicator />
       ) : (
         <FlatList
           data={users}
           keyExtractor={(item) => item.uid}
           renderItem={renderItem}
-          ListEmptyComponent={
-            <Text style={styles.empty}>Aucun membre trouvé.</Text>
-          }
+          ListEmptyComponent={<Text style={styles.empty}>Aucun membre.</Text>}
         />
       )}
     </View>
@@ -273,83 +185,47 @@ const renderItem = ({ item }: { item: UserData }) => {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-userRow: {
-  flexDirection: 'column',
-  gap: 10,
-  paddingVertical: 14,
-  borderBottomWidth: 1,
-  borderColor: '#eee',
-},
-
-  info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600' },
-  email: { fontSize: 14, color: '#666' },
-  role: { fontSize: 14, marginTop: 4, color: '#444' },
-  button: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  container: { flex: 1, padding: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  userRow: {
+    marginBottom: 16,
+    padding: 12,
     borderRadius: 8,
-    marginLeft: 12,
+    backgroundColor: '#f5f5f5',
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
+  name: { fontSize: 16, fontWeight: '600' },
+  email: { fontSize: 14, color: '#555' },
+  role: { fontSize: 14, color: '#666' },
+  removeButton: {
+    backgroundColor: '#dc3545',
+    padding: 8,
+    marginTop: 8,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
   },
-  empty: { textAlign: 'center', marginTop: 30, color: '#777' },
-  inviteContainer: {
-    marginBottom: 20,
-    gap: 10,
+  removeButtonText: { color: '#fff', fontWeight: 'bold' },
+  quitButton: {
+    backgroundColor: '#ffa500',
+    padding: 8,
+    marginTop: 8,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
   },
+  quitButtonText: { color: '#fff', fontWeight: 'bold' },
+  inviteContainer: { marginBottom: 20, gap: 10 },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
-    borderRadius: 8,
     padding: 10,
+    borderRadius: 6,
+    marginBottom: 10,
   },
   inviteButton: {
     backgroundColor: '#28a745',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    padding: 12,
     alignItems: 'center',
+    borderRadius: 6,
   },
-  inviteButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },removeButton: {
-  backgroundColor: '#FF3B30',
-  paddingVertical: 6,
-  paddingHorizontal: 10,
-  borderRadius: 8,
-  alignSelf: 'flex-start',
-  marginTop: 8,
-},
-removeButtonText: {
-  color: '#fff',
-  fontWeight: 'bold',
-  fontSize: 12,
-},
-quitButton: {
-  backgroundColor: '#FFA500',
-  paddingVertical: 6,
-  paddingHorizontal: 10,
-  borderRadius: 8,
-  alignSelf: 'flex-start',
-  marginTop: 8,
-},
-quitButtonText: {
-  color: '#fff',
-  fontWeight: 'bold',
-  fontSize: 12,
-},
-
+  inviteButtonText: { color: '#fff', fontWeight: 'bold' },
+  empty: { textAlign: 'center', marginTop: 30 },
 });
