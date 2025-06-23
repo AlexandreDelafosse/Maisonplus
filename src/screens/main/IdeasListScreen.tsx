@@ -12,7 +12,7 @@ import {
   increment,
   getDoc,
   setDoc,
-  deleteDoc 
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { useCurrentTeam } from '../../hooks/useCurrentTeam';
@@ -24,6 +24,8 @@ import { getAuth } from 'firebase/auth';
 type ExtendedIdea = Idea & {
   hasVoted?: boolean;
   voters: string[];
+  deadline?: Date;
+  badge?: string;
 };
 
 export default function IdeasListScreen() {
@@ -69,11 +71,26 @@ export default function IdeasListScreen() {
 
         const hasVoted = votersIds.includes(userId);
 
+        const now = new Date();
+        const createdAt = data.createdAt?.toDate?.() || new Date();
+        const deadline = data.deadline?.toDate?.() || null;
+
+        const daysSinceCreation = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const badge: string | undefined = 
+          data.status === 'accepted' ? '✅ Acceptée' :
+          data.status === 'rejected' ? '❌ Refusée' :
+          daysSinceCreation <= 3 ? '🟢 Nouveau' :
+          data.votes >= 10 ? '🔥 Populaire' :
+          daysSinceCreation > 7 && data.votes < 3 ? '🧊 En attente' :
+          undefined;
+
         ideasData.push({
           id: docSnap.id,
           ...data,
           hasVoted,
-          voters: votersNames
+          voters: votersNames,
+          deadline,
+          badge
         });
       }
 
@@ -93,15 +110,23 @@ export default function IdeasListScreen() {
     try {
       const user = getAuth().currentUser;
       if (!user) return;
-
       const userId = user.uid;
+
+      const ideaDoc = await getDoc(doc(db, 'ideas', ideaId));
+      const ideaData = ideaDoc.data();
+      const deadline = ideaData?.deadline?.toDate?.();
+
+      if (deadline && new Date() > deadline) {
+        alert("⏳ La période de vote est terminée pour cette idée.");
+        return;
+      }
+
       const voteDocRef = doc(db, 'ideas', ideaId, 'votes', userId);
       const voteDoc = await getDoc(voteDocRef);
 
       if (voteDoc.exists()) return;
 
-      const ideaRef = doc(db, 'ideas', ideaId);
-      await updateDoc(ideaRef, {
+      await updateDoc(doc(db, 'ideas', ideaId), {
         votes: increment(1)
       });
 
@@ -120,11 +145,10 @@ export default function IdeasListScreen() {
     try {
       const user = getAuth().currentUser;
       if (!user) return;
-
       const userId = user.uid;
+
       const voteDocRef = doc(db, 'ideas', ideaId, 'votes', userId);
       const voteDoc = await getDoc(voteDocRef);
-
       if (!voteDoc.exists()) return;
 
       await updateDoc(doc(db, 'ideas', ideaId), {
@@ -132,7 +156,6 @@ export default function IdeasListScreen() {
       });
 
       await deleteDoc(voteDocRef);
-
       fetchIdeas();
     } catch (error) {
       console.error('Erreur lors du retrait du vote :', error);
@@ -149,6 +172,21 @@ export default function IdeasListScreen() {
           onPress={() => navigation.navigate('IdeaEditor', { ideaId: item.id })}
         >
           <Text style={styles.ideaTitle}>{item.title}</Text>
+
+          {item.badge && <Text style={styles.badgeText}>{item.badge}</Text>}
+
+          {item.deadline && (
+            <Text
+              style={[
+                styles.deadlineText,
+                item.deadline < new Date() && styles.deadlineExpired
+              ]}
+            >
+              ⏳ Vote jusqu’au {new Date(item.deadline).toLocaleDateString()}
+            </Text>
+          )}
+
+
           {item.description ? (
             <Text numberOfLines={1} style={styles.ideaDescription}>
               {item.description}
@@ -220,6 +258,8 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   ideaTitle: { fontSize: 16, fontWeight: 'bold' },
+  badgeText: { marginTop: 4, fontWeight: 'bold', color: '#FF9500' },
+  deadlineText: { fontSize: 12, color: '#888', marginTop: 2 },
   ideaDescription: { fontSize: 14, color: '#555' },
   voteCount: { marginTop: 6, color: '#333' },
   voteButton: {
@@ -253,5 +293,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16
-  }
+  },
+  deadlineExpired: {
+  color: '#FF3B30', // rouge iOS
+  fontWeight: 'bold',
+},
+
 });

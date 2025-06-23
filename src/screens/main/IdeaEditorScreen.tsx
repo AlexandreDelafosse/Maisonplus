@@ -6,9 +6,11 @@ import {
   Text,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
 import { useCurrentTeam } from '../../hooks/useCurrentTeam';
@@ -16,10 +18,19 @@ import { useCurrentTeam } from '../../hooks/useCurrentTeam';
 export default function IdeaEditorScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [deadline, setDeadline] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
   const navigation = useNavigation();
   const user = getAuth().currentUser;
-  const { teamId } = useCurrentTeam(); // ajoute cette ligne au début du composant
+  const { teamId } = useCurrentTeam();
 
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDeadline(selectedDate);
+    }
+  };
 
   const saveIdea = async () => {
     if (!user) return;
@@ -34,9 +45,11 @@ export default function IdeaEditorScreen() {
         description,
         votes: 0,
         createdAt: serverTimestamp(),
+        deadline: deadline ? Timestamp.fromDate(deadline) : null,
+        status: 'pending',
         author: user.displayName || '',
         userId: user.uid,
-        teamId, // ← ajoute ce champ !
+        teamId,
       });
       navigation.goBack();
     } catch (err) {
@@ -60,6 +73,23 @@ export default function IdeaEditorScreen() {
         style={styles.descInput}
         multiline
       />
+
+      <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+        <Text style={styles.dateButtonText}>
+          {deadline ? `📅 ${deadline.toLocaleDateString()}` : '📅 Choisir une deadline'}
+        </Text>
+      </TouchableOpacity>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={deadline || new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+          minimumDate={new Date()}
+        />
+      )}
+
       <TouchableOpacity style={styles.saveButton} onPress={saveIdea}>
         <Text style={styles.saveText}>💾 Sauvegarder</Text>
       </TouchableOpacity>
@@ -86,6 +116,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
+  },
+  dateButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#333',
   },
   saveButton: {
     backgroundColor: '#28a745',

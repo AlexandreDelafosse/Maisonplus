@@ -49,4 +49,6 @@ export type Idea = {
   votes: number;
   teamId: string;
   createdAt: any;
+  deadline?: any; // ← nouveau champ
+  status?: 'accepted' | 'rejected' | 'pending'; // ← nouveau champ
 };
