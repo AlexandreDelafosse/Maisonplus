@@ -11,11 +11,16 @@ export type RootStackParamList = {
     email: string;
     id: string;
   };
-  
   Main: undefined;
   Profile: undefined;
   SelectTeam: undefined;
   CreateTeam: undefined;
+};
+
+// 👇 AJOUTE CECI
+export type IdeasStackParamList = {
+  IdeasList: undefined;
+  IdeaEditor: { ideaId?: string }; // le `?` rend `ideaId` optionnel
 };
 
 export type Note = {
@@ -32,6 +37,16 @@ export type ChatMessage = {
   id: string;
   userId: string;
   content: string;
-  timestamp: any; // ou Timestamp si tu veux être plus précis
+  timestamp: any; // ou Timestamp
   teamId: string;
+};
+
+export type Idea = {
+  author: string;
+  id: string;
+  title: string;
+  description: string;
+  votes: number;
+  teamId: string;
+  createdAt: any;
 };

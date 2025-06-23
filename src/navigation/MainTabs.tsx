@@ -11,17 +11,15 @@ import { hasFeature } from '../utils/TeamFeaturesManager';
 import NotesScreen from '../screens/main/NotesScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import { ActivityIndicator, View } from 'react-native';
+import IdeasStackNavigator from './IdeasStack';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 
 const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
   const { teamData, loading } = useCurrentTeam();
 
-  console.log('teamData', teamData);
-console.log('loading', loading);
-
-
-  // 💡 Affiche un spinner pendant le chargement
   if (loading || !teamData?.pack) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -33,27 +31,35 @@ console.log('loading', loading);
   const pack = teamData.pack;
 
   return (
-<Tab.Navigator>
-  {hasFeature(pack, 'tasks') && (
-    <Tab.Screen name="Tasks" component={TasksScreen} />
-  )}
-  {hasFeature(pack, 'calendar') && (
-    <Tab.Screen name="Calendar" component={CalendarScreen} />
-  )}
-  {hasFeature(pack, 'notes') && (
-    <Tab.Screen name="Notes" component={NotesStack} /> // ✅ pas NotesScreen !
-  )}
-  {hasFeature(pack, 'budget') && (
-    <Tab.Screen name="Budget" component={BudgetScreen} />
-  )}
-  {hasFeature(pack, 'chat') && (
-    <Tab.Screen name="Chat" component={ChatScreen} />
-  )}
+    <Tab.Navigator>
+      {hasFeature(pack, 'tasks') && (
+        <Tab.Screen name="Tasks" component={TasksScreen} />
+      )}
+      {hasFeature(pack, 'calendar') && (
+        <Tab.Screen name="Calendar" component={CalendarScreen} />
+      )}
+      {hasFeature(pack, 'notes') && (
+        <Tab.Screen name="Notes" component={NotesStack} />
+      )}
+      {hasFeature(pack, 'budget') && (
+        <Tab.Screen name="Budget" component={BudgetScreen} />
+      )}
+      {hasFeature(pack, 'chat') && (
+        <Tab.Screen name="Chat" component={ChatScreen} />
+      )}
+      {hasFeature(pack, 'ideas') && (
+        <Tab.Screen
+          name="Ideas"
+          component={IdeasStackNavigator}
+          options={{
+            tabBarLabel: 'Idées',
+            tabBarIcon: ({ color, size }) => <Icon name="lightbulb" size={size} color={color} />,
+          }}
+        />
+      )}
 
-  {/* 👇 Toujours visibles, peu importe le pack */}
-  <Tab.Screen name="Team" component={TeamScreen} />
-  <Tab.Screen name="Profile" component={ProfileScreen} />
-</Tab.Navigator>
-
+      <Tab.Screen name="Team" component={TeamScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
   );
 }
