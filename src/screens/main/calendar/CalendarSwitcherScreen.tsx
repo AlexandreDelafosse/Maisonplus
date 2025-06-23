@@ -1,17 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import CalendarScreen from './CalendarScreen';
 import EventListScreen from './EventListScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Animatable from 'react-native-animatable';
+
+type ViewMode = 'calendar' | 'list';
 
 export default function CalendarSwitcherScreen() {
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
+
+  // 🔄 Charger le dernier mode depuis AsyncStorage
+  useEffect(() => {
+    const loadMode = async () => {
+      const saved = await AsyncStorage.getItem('calendarViewMode');
+      if (saved === 'list' || saved === 'calendar') {
+        setViewMode(saved);
+      }
+    };
+    loadMode();
+  }, []);
+
+  const switchMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    AsyncStorage.setItem('calendarViewMode', mode);
+  };
 
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.switchContainer}>
         <TouchableOpacity
           style={[styles.switchButton, viewMode === 'calendar' && styles.active]}
-          onPress={() => setViewMode('calendar')}
+          onPress={() => switchMode('calendar')}
         >
           <Text style={viewMode === 'calendar' ? styles.activeText : styles.inactiveText}>
             🗓️ Calendrier
@@ -20,7 +40,7 @@ export default function CalendarSwitcherScreen() {
 
         <TouchableOpacity
           style={[styles.switchButton, viewMode === 'list' && styles.active]}
-          onPress={() => setViewMode('list')}
+          onPress={() => switchMode('list')}
         >
           <Text style={viewMode === 'list' ? styles.activeText : styles.inactiveText}>
             📋 Liste
@@ -28,7 +48,10 @@ export default function CalendarSwitcherScreen() {
         </TouchableOpacity>
       </View>
 
-      {viewMode === 'calendar' ? <CalendarScreen /> : <EventListScreen />}
+      {/* 🌟 Animation fluide */}
+      <Animatable.View key={viewMode} animation="fadeIn" duration={300} style={{ flex: 1 }}>
+        {viewMode === 'calendar' ? <CalendarScreen /> : <EventListScreen />}
+      </Animatable.View>
     </View>
   );
 }
