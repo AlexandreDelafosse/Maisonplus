@@ -10,12 +10,12 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { NotesStackParamList } from '../../navigation/NotesStack';
+import { NotesStackParamList } from '../../../navigation/NotesStack';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { useTeamNotes } from '../../hooks/useTeamNotes'; // ✅ Hook custom
+import { useTeamNotes } from '../../../hooks/useTeamNotes'; // ✅ Hook custom
 import { useIsFocused } from '@react-navigation/native';
-import { Note } from '../../navigation/types';
+import { Note } from '../../../navigation/types';
 
 
 type NavigationProp = NativeStackNavigationProp<NotesStackParamList, 'NotesList'>;

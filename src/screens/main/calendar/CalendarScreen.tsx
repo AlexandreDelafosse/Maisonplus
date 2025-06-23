@@ -23,7 +23,7 @@ import {
   deleteDoc,
   getDoc,
 } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
+import { db } from '../../../services/firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 
 interface EventType {
@@ -33,13 +33,13 @@ interface EventType {
   start: Date;
   end: Date;
   createdByName?: string;
+  color?: string;
 }
 
 export default function CalendarScreen() {
   const [events, setEvents] = useState<EventType[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
 
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -50,14 +50,12 @@ export default function CalendarScreen() {
 
   const [newTitle, setNewTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startTime, setStartTime] = useState('10:00');
-  const [endTime, setEndTime] = useState('11:00');
   const [creatorName, setCreatorName] = useState('');
+  const [eventType, setEventType] = useState('Réunion');
 
   const auth = getAuth();
   const user = auth.currentUser;
 
-  // 🔁 Récupère le teamId de l'utilisateur connecté
   useFocusEffect(
     useCallback(() => {
       const fetchTeamId = async () => {
@@ -72,24 +70,31 @@ export default function CalendarScreen() {
     }, [user])
   );
 
-  // 📅 Écoute les événements de la team
   useFocusEffect(
     useCallback(() => {
       if (!teamId) return;
 
       const q = query(collection(db, 'calendarevents'), where('teamId', '==', teamId));
       const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          title: data.title,
-          description: data.description || '',
-          start: data.start.toDate(),
-          end: data.end.toDate(),
-          createdByName: data.createdByName || '',
+        const typeColorMap: { [key: string]: string } = {
+          Réunion: '#007AFF',
+          Anniversaire: '#FF9500',
+          Sortie: '#34C759',
+          Perso: '#8E8E93',
         };
-      });
+
+        const fetched = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title,
+            description: data.description || '',
+            start: data.start.toDate(),
+            end: data.end.toDate(),
+            createdByName: data.createdByName || '',
+            color: typeColorMap[data.type] || '#CCCCCC',
+          };
+        });
         setEvents(fetched);
       });
 
@@ -97,63 +102,53 @@ export default function CalendarScreen() {
     }, [teamId])
   );
 
-const handlePressCell = (date: Date) => {
-  setSelectedDate(date);
-  setStartDate(date);
-  setEndDate(date);
-  setStartTime('10:00');
-  setEndTime('11:00');
-  setNewTitle('');
-  setDescription('');
-  setCreatorName(''); // ✅ Réinitialise le créateur
-  setIsEditing(false);
-  setModalVisible(true);
-};
+  const handlePressCell = (date: Date) => {
+    const defaultStart = new Date(date);
+    defaultStart.setHours(10, 0, 0, 0);
+    const defaultEnd = new Date(date);
+    defaultEnd.setHours(11, 0, 0, 0);
 
+    setStartDate(defaultStart);
+    setEndDate(defaultEnd);
+    setNewTitle('');
+    setDescription('');
+    setCreatorName('');
+    setEventType('Réunion');
+    setIsEditing(false);
+    setModalVisible(true);
+  };
 
   const handlePressEvent = (event: EventType) => {
-    setSelectedDate(event.start);
     setStartDate(event.start);
     setEndDate(event.end);
     setNewTitle(event.title);
     setDescription(event.description || '');
-    setStartTime(event.start.toTimeString().slice(0, 5));
-    setEndTime(event.end.toTimeString().slice(0, 5));
     setIsEditing(true);
     setEditingId(event.id);
-    setModalVisible(true);
     setCreatorName(event.createdByName || '');
-
-  };
-
-  const parseTime = (baseDate: Date, time: string): Date => {
-    const [hour, minute] = time.split(':').map(Number);
-    const newDate = new Date(baseDate);
-    newDate.setHours(hour, minute, 0, 0);
-    return newDate;
+    setModalVisible(true);
   };
 
   const submitEvent = async () => {
     if (!startDate || !endDate || !newTitle.trim() || !teamId) return;
-
-    const start = parseTime(startDate, startTime);
-    const end = parseTime(endDate, endTime);
-    if (end <= start) return alert("L'heure de fin doit être après l'heure de début.");
+    if (endDate <= startDate) return alert("L'heure de fin doit être après l'heure de début.");
 
     if (isEditing && editingId) {
       const ref = doc(db, 'calendarevents', editingId);
       await updateDoc(ref, {
         title: newTitle,
         description,
-        start,
-        end,
+        start: startDate,
+        end: endDate,
+        type: eventType,
       });
     } else {
       await addDoc(collection(db, 'calendarevents'), {
         title: newTitle,
         description,
-        start,
-        end,
+        start: startDate,
+        end: endDate,
+        type: eventType,
         teamId,
         createdByUid: user?.uid || '',
         createdByName: user?.displayName || user?.email || 'Inconnu',
@@ -217,51 +212,67 @@ const handlePressCell = (date: Date) => {
               multiline
             />
 
-            <TouchableOpacity onPress={() => setShowStartPicker(true)} style={styles.input}>
-              <Text>{startDate ? startDate.toDateString() : 'Choisir une date de début'}</Text>
+            <Text style={{ fontWeight: 'bold' }}>Type d'événement</Text>
+            <View style={styles.pickerContainer}>
+              {['Réunion', 'Anniversaire', 'Sortie', 'Perso'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.typeOption,
+                    eventType === type && { backgroundColor: '#007AFF' },
+                  ]}
+                  onPress={() => setEventType(type)}
+                >
+                  <Text style={{ color: eventType === type ? 'white' : 'black' }}>{type}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
+              <Text style={styles.dateButtonText}>
+                {startDate
+                  ? `📅 ${startDate.toLocaleDateString()} à ${startDate.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}`
+                  : '📅 Choisir date et heure de début'}
+              </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
+              <Text style={styles.dateButtonText}>
+                {endDate
+                  ? `📅 ${endDate.toLocaleDateString()} à ${endDate.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}`
+                  : '📅 Choisir date et heure de fin'}
+              </Text>
+            </TouchableOpacity>
+
             {showStartPicker && (
               <DateTimePicker
                 value={startDate || new Date()}
-                mode="date"
+                mode="datetime"
                 display="default"
-                onChange={(event, selectedDate) => {
+                onChange={(_: unknown, date?: Date) => {
                   setShowStartPicker(false);
-                  if (selectedDate) setStartDate(selectedDate);
+                  if (date) setStartDate(date);
                 }}
               />
             )}
 
-            <TextInput
-              placeholder="Heure de début (HH:MM)"
-              value={startTime}
-              onChangeText={setStartTime}
-              style={styles.input}
-              keyboardType="numeric"
-            />
-
-            <TouchableOpacity onPress={() => setShowEndPicker(true)} style={styles.input}>
-              <Text>{endDate ? endDate.toDateString() : 'Choisir une date de fin'}</Text>
-            </TouchableOpacity>
             {showEndPicker && (
               <DateTimePicker
                 value={endDate || new Date()}
-                mode="date"
+                mode="datetime"
                 display="default"
-                onChange={(event, selectedDate) => {
+                onChange={(_: unknown, date?: Date) => {
                   setShowEndPicker(false);
-                  if (selectedDate) setEndDate(selectedDate);
+                  if (date) setEndDate(date);
                 }}
               />
             )}
-
-            <TextInput
-              placeholder="Heure de fin (HH:MM)"
-              value={endTime}
-              onChangeText={setEndTime}
-              style={styles.input}
-              keyboardType="numeric"
-            />
 
             {creatorName ? (
               <Text style={{ fontStyle: 'italic', marginBottom: 8 }}>
@@ -269,9 +280,7 @@ const handlePressCell = (date: Date) => {
               </Text>
             ) : null}
 
-
             <TouchableOpacity style={styles.addButton} onPress={submitEvent}>
-            
               <Text style={styles.addText}>{isEditing ? 'Modifier' : 'Ajouter'}</Text>
             </TouchableOpacity>
 
@@ -315,6 +324,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
+  pickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  typeOption: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    marginRight: 6,
+    marginBottom: 6,
+  },
   addButton: {
     backgroundColor: '#007AFF',
     padding: 12,
@@ -335,5 +357,16 @@ const styles = StyleSheet.create({
     color: 'red',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  dateButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  dateButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
   },
 });

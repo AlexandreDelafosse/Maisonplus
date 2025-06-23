@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   TextInput,
@@ -7,23 +7,63 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
-import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
+} from 'firebase/firestore';
+import { db } from '../../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
-import { useCurrentTeam } from '../../hooks/useCurrentTeam';
+import { useCurrentTeam } from '../../../hooks/useCurrentTeam';
 
 export default function IdeaEditorScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const navigation = useNavigation();
+  const route = useRoute<any>();
+  const ideaId = route.params?.ideaId || null;
+
   const user = getAuth().currentUser;
   const { teamId } = useCurrentTeam();
+
+  useEffect(() => {
+    if (!ideaId) return;
+
+    const fetchIdea = async () => {
+      setLoading(true);
+      try {
+        const ideaRef = doc(db, 'ideas', ideaId);
+        const ideaSnap = await getDoc(ideaRef);
+        if (ideaSnap.exists()) {
+          const data = ideaSnap.data();
+          setTitle(data.title || '');
+          setDescription(data.description || '');
+          if (data.deadline?.toDate) {
+            setDeadline(data.deadline.toDate());
+          }
+        }
+      } catch (error) {
+        console.error('Erreur chargement idée :', error);
+        Alert.alert('Erreur', "Impossible de charger l'idée.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIdea();
+  }, [ideaId]);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -39,24 +79,44 @@ export default function IdeaEditorScreen() {
       return;
     }
 
+    const data = {
+      title,
+      description,
+      deadline: deadline ? Timestamp.fromDate(deadline) : null,
+      updatedAt: serverTimestamp(),
+    };
+
     try {
-      await addDoc(collection(db, 'ideas'), {
-        title,
-        description,
-        votes: 0,
-        createdAt: serverTimestamp(),
-        deadline: deadline ? Timestamp.fromDate(deadline) : null,
-        status: 'pending',
-        author: user.displayName || '',
-        userId: user.uid,
-        teamId,
-      });
+      if (ideaId) {
+        // Update mode
+        await updateDoc(doc(db, 'ideas', ideaId), data);
+      } else {
+        // Create mode
+        await addDoc(collection(db, 'ideas'), {
+          ...data,
+          createdAt: serverTimestamp(),
+          votes: 0,
+          status: 'pending',
+          author: user.displayName || '',
+          userId: user.uid,
+          teamId,
+        });
+      }
+
       navigation.goBack();
     } catch (err) {
       Alert.alert('Erreur', 'Impossible de sauvegarder l’idée.');
       console.error(err);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#28a745" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -136,5 +196,10 @@ const styles = StyleSheet.create({
     color: 'white',
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

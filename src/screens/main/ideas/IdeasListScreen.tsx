@@ -14,11 +14,11 @@ import {
   setDoc,
   deleteDoc
 } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
-import { useCurrentTeam } from '../../hooks/useCurrentTeam';
-import { Idea } from '../../navigation/types';
+import { db } from '../../../services/firebaseConfig';
+import { useCurrentTeam } from '../../../hooks/useCurrentTeam';
+import { Idea } from '../../../navigation/types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { IdeasStackParamList } from '../../navigation/types';
+import { IdeasStackParamList } from '../../../navigation/types';
 import { getAuth } from 'firebase/auth';
 
 type ExtendedIdea = Idea & {
@@ -186,7 +186,6 @@ export default function IdeasListScreen() {
             </Text>
           )}
 
-
           {item.description ? (
             <Text numberOfLines={1} style={styles.ideaDescription}>
               {item.description}
@@ -295,8 +294,7 @@ const styles = StyleSheet.create({
     fontSize: 16
   },
   deadlineExpired: {
-  color: '#FF3B30', // rouge iOS
-  fontWeight: 'bold',
-},
-
+    color: '#FF3B30',
+    fontWeight: 'bold'
+  },
 });
