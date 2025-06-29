@@ -35,9 +35,11 @@ export default function AppNavigator() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {user ? (
             <>
-              <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
-              <Stack.Screen name="SelectTeam" component={SelectTeamScreen} />
               <Stack.Screen name="Main" component={MainTabs} />
+              
+              
+              <Stack.Screen name="SelectTeam" component={SelectTeamScreen} />
+              <Stack.Screen name="CreateTeam" component={CreateTeamScreen} />
             </>
           ) : (
             <>

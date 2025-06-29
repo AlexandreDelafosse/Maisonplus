@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,9 @@ export default function TeamScreen() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteFirstName, setInviteFirstName] = useState('');
 
-  const isAdmin = teamData?.admins?.includes(currentUser?.uid);
+  const isCurrentUserAdmin = useMemo(() => {
+    return users.find((u) => u.uid === currentUser?.uid)?.role === 'admin';
+  }, [users, currentUser?.uid]);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -80,6 +82,7 @@ export default function TeamScreen() {
         const invitationRef = await addDoc(collection(db, 'invitations'), {
           email,
           teamId,
+          teamName: teamData.name, // 👈 Ajout nécessaire
           invitedAt: new Date().toISOString(),
           status: 'pending',
         });
@@ -129,7 +132,7 @@ export default function TeamScreen() {
           <Text style={styles.role}>🔰 {item.role || 'membre'}</Text>
         </View>
 
-        {!isCurrentUser && isAdmin && (
+        {!isCurrentUser && isCurrentUserAdmin && (
           <TouchableOpacity style={styles.removeButton} onPress={() => removeFromTeam(item.uid)}>
             <Text style={styles.removeButtonText}>Retirer</Text>
           </TouchableOpacity>
@@ -148,7 +151,7 @@ export default function TeamScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>👥 {teamData?.name || 'Équipe'}</Text>
 
-      {isAdmin && (
+      {isCurrentUserAdmin && (
         <View style={styles.inviteContainer}>
           <TextInput
             style={styles.input}

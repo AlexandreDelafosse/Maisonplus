@@ -14,14 +14,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (usr) => {
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (usr) => {
+    if (usr) {
+      console.log('User is logged in:', usr.email);
       setUser(usr);
-      setLoading(false);
-    });
+    } else {
+      console.log('No user logged in');
+      setUser(null);
+    }
+    setLoading(false);
+  });
 
-    return unsubscribe;
-  }, []);
+  return unsubscribe;
+}, []);
+
+
 
   return (
     <AuthContext.Provider value={{ user, loading }}>

@@ -77,10 +77,12 @@ onPress: () => {
   }
 
   try {
-    await updateDoc(doc(db, 'users', currentUser.uid), {
-      teamId: invitation.teamId,
-    });
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        teamId: invitation.teamId,
+        role: 'member', // 👈 ou 'admin' si tu veux une invitation admin
+      });
 
+    await refreshUser(); // ou refetchUser(), selon ton hook
     await deleteDoc(doc(db, 'invitations', id));
 
     Alert.alert("Bienvenue !", "Vous avez rejoint l'équipe.");
@@ -149,3 +151,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+function refreshUser() {
+  throw new Error('Function not implemented.');
+}
+

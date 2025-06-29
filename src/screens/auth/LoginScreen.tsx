@@ -39,7 +39,7 @@ export default function LoginScreen({ navigation }: Props) {
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button title="Connexion" onPress={handleLogin} />
-      <Text style={styles.link} onPress={() => navigation.navigate('SelectTeam')}>
+      <Text style={styles.link} onPress={() => navigation.navigate('Register')}>
         Pas encore de compte ? S’inscrire
       </Text>
     </View>

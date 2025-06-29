@@ -1,5 +1,7 @@
 // src/navigation/MainTabs.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from './types';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import NotesStack from './NotesStack';
 import { TasksScreen } from '../screens/main/TasksScreen';
@@ -12,14 +14,27 @@ import ChatScreen from '../screens/main/ChatScreen';
 import IdeasStackNavigator from './IdeasStack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ActivityIndicator, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
-// ✅ Nouveau composant qui gère la bascule liste/calendrier
+// ✅ Composant pour gérer la bascule liste/calendrier
 import CalendarSwitcherScreen from '../screens/main/calendar/CalendarSwitcherScreen';
 
 const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
   const { teamData, loading } = useCurrentTeam();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+
+  useEffect(() => {
+    console.log('teamData:', teamData);
+    if (!loading && !teamData?.pack) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SelectTeam' }],
+      });
+    }
+  }, [loading, teamData]);
 
   if (loading || !teamData?.pack) {
     return (
