@@ -1,46 +1,75 @@
+// ✅ useTeamMembers.ts
 import { useEffect, useState } from 'react';
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useCurrentTeam } from './useCurrentTeam';
+import { User } from '../navigation/types';
 
 export type Member = {
+  user: any;
   id: string;
   displayName: string;
-  email?: string;
-  role?: string;
 };
 
-export function useTeamMembers(p0: any) {
-  const { teamId, loading: teamLoading } = useCurrentTeam();
+interface Membership {
+  user: User;
+  role: 'admin' | 'member';
+  joinedAt: Date | any;
+}
+
+export function useTeamMembers(p0: string): { members: Member[]; loading: boolean } {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const { teamId } = useCurrentTeam();
 
   useEffect(() => {
-    if (teamLoading) return;
+    if (!teamId) return;
 
-    const fetchMembers = async () => {
-      if (!teamId) {
-        setMembers([]);
-        setLoading(false);
-        return;
-      }
+    const q = query(
+      collection(db, 'memberships'),
+      where('teamId', '==', teamId)
+    );
 
-      const q = query(collection(db, 'users'), where('teamId', '==', teamId));
-      const snapshot = await getDocs(q);
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const rawList: (Member | null)[] = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          const membership = docSnap.data();
+          const userSnap = await getDoc(doc(db, 'users', membership.userId));
 
-      const list: Member[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        displayName: doc.data().displayName || 'Anonyme',
-        email: doc.data().email,
-        role: doc.data().role,
-      }));
+          if (!userSnap.exists()) return null;
 
+          const userData = userSnap.data();
+          if (!userData?.email) return null;
+
+          return {
+            id: userSnap.id,
+            displayName: userData.displayName || userData.firstName || userData.email,
+            user: {
+              id: userSnap.id,
+              email: userData.email,
+              displayName: userData.displayName,
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+            },
+          };
+
+        })
+      );
+
+      const list = rawList.filter((m): m is Member => m !== null);
       setMembers(list);
       setLoading(false);
-    };
+    });
 
-    fetchMembers();
-  }, [teamId, teamLoading]);
+    return () => unsubscribe();
+  }, [teamId]);
 
   return { members, loading };
 }

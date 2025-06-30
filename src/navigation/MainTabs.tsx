@@ -1,42 +1,39 @@
-// src/navigation/MainTabs.tsx
 import React, { useEffect } from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { ActivityIndicator, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+
 import NotesStack from './NotesStack';
 import { TasksScreen } from '../screens/main/TasksScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import TeamScreen from '../screens/main/TeamScreen';
 import BudgetScreen from '../screens/main/BudgetScreen';
-import { useCurrentTeam } from '../hooks/useCurrentTeam';
-import { hasFeature } from '../utils/TeamFeaturesManager';
 import ChatScreen from '../screens/main/ChatScreen';
+import CalendarSwitcherScreen from '../screens/main/calendar/CalendarSwitcherScreen';
 import IdeasStackNavigator from './IdeasStack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { ActivityIndicator, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 
-// ✅ Composant pour gérer la bascule liste/calendrier
-import CalendarSwitcherScreen from '../screens/main/calendar/CalendarSwitcherScreen';
+import { hasFeature } from '../utils/TeamFeaturesManager';
+import { useMembership } from '../context/MembershipContext'; // ✅ nouveau hook
 
 const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
-  const { teamData, loading } = useCurrentTeam();
+  const { team, loading } = useMembership(); // ✅ remplacé
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-
   useEffect(() => {
-    console.log('teamData:', teamData);
-    if (!loading && !teamData?.pack) {
+    if (!loading && !team?.pack) {
       navigation.reset({
         index: 0,
         routes: [{ name: 'SelectTeam' }],
       });
     }
-  }, [loading, teamData]);
+  }, [loading, team]);
 
-  if (loading || !teamData?.pack) {
+  if (loading || !team?.pack) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -44,13 +41,11 @@ export default function MainTabs() {
     );
   }
 
-  const pack = teamData.pack;
+  const pack = team.pack;
 
   return (
     <Tab.Navigator>
-      {hasFeature(pack, 'tasks') && (
-        <Tab.Screen name="Tasks" component={TasksScreen} />
-      )}
+      {hasFeature(pack, 'tasks') && <Tab.Screen name="Tasks" component={TasksScreen} />}
 
       {hasFeature(pack, 'calendar') && (
         <Tab.Screen
@@ -65,17 +60,9 @@ export default function MainTabs() {
         />
       )}
 
-      {hasFeature(pack, 'notes') && (
-        <Tab.Screen name="Notes" component={NotesStack} />
-      )}
-
-      {hasFeature(pack, 'budget') && (
-        <Tab.Screen name="Budget" component={BudgetScreen} />
-      )}
-
-      {hasFeature(pack, 'chat') && (
-        <Tab.Screen name="Chat" component={ChatScreen} />
-      )}
+      {hasFeature(pack, 'notes') && <Tab.Screen name="Notes" component={NotesStack} />}
+      {hasFeature(pack, 'budget') && <Tab.Screen name="Budget" component={BudgetScreen} />}
+      {hasFeature(pack, 'chat') && <Tab.Screen name="Chat" component={ChatScreen} />}
 
       {hasFeature(pack, 'ideas') && (
         <Tab.Screen
@@ -90,8 +77,28 @@ export default function MainTabs() {
         />
       )}
 
-      <Tab.Screen name="Team" component={TeamScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen
+  name="Team"
+  component={TeamScreen}
+  options={{
+    tabBarLabel: 'Team',
+    tabBarIcon: ({ color, size }) => (
+      <Icon name="account-group" size={size} color={color} />
+    ),
+  }}
+/>
+
+      <Tab.Screen
+  name="Profile"
+  component={ProfileScreen}
+  options={{
+    tabBarLabel: 'Profil',
+    tabBarIcon: ({ color, size }) => (
+      <Icon name="account-circle" size={size} color={color} />
+    ),
+  }}
+/>
+
     </Tab.Navigator>
   );
 }

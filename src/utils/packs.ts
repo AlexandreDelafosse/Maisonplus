@@ -1,10 +1,9 @@
-// ✅ packs.ts (dans /utils)
 export const PACKS = {
   famille: {
     label: 'Famille',
     features: ['calendar', 'tasks', 'notes', 'chat'],
   },
-  colocation: {
+  coloc: {
     label: 'Colocation',
     features: ['tasks', 'budget', 'calendar', 'chat'],
   },
@@ -16,4 +15,7 @@ export const PACKS = {
     label: 'Projet/Association',
     features: ['tasks', 'notes', 'calendar'],
   },
-};
+} as const;
+
+export type TeamPack = keyof typeof PACKS;
+// "famille" | "coloc" | "amis" | "projet"

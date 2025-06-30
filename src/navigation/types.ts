@@ -1,4 +1,7 @@
 // src/navigation/types.ts
+
+import { TeamPack } from '../utils/packs'; // ou ajuste le chemin
+
 export type RootStackParamList = {
   Login: undefined;
   Register: {
@@ -52,3 +55,18 @@ export type Idea = {
   deadline?: any; // ← nouveau champ
   status?: 'accepted' | 'rejected' | 'pending'; // ← nouveau champ
 };
+
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  [key: string]: any;
+}
+export interface Team {
+  id: string;
+  name: string;
+  pack?: TeamPack;
+  [key: string]: any;
+}

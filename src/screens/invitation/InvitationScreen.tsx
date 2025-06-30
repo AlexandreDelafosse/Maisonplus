@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRoute, useNavigation, NavigationProp } from '@react-navigation/native';
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
 import { RootStackParamList } from '../../navigation/types';
@@ -77,10 +77,12 @@ onPress: () => {
   }
 
   try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
+      await setDoc(doc(db, 'memberships', `${invitation.teamId}_${currentUser.uid}`), {
+        userId: currentUser.uid,
         teamId: invitation.teamId,
-        role: 'member', // 👈 ou 'admin' si tu veux une invitation admin
+        role: 'member',
       });
+
 
     await refreshUser(); // ou refetchUser(), selon ton hook
     await deleteDoc(doc(db, 'invitations', id));

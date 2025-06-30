@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,60 +12,67 @@ import {
 import {
   doc,
   getDoc,
-  updateDoc,
+  deleteDoc,
   collection,
   query,
   where,
   getDocs,
   addDoc,
+  Timestamp,
 } from 'firebase/firestore';
 import { getAuth, fetchSignInMethodsForEmail } from 'firebase/auth';
-import { useCurrentTeam } from '../../hooks/useCurrentTeam';
 import { db } from '../../services/firebaseConfig';
+import { useMembership } from '../../context/MembershipContext';
 import { sendEmailInvitation } from '../../services/email';
 
 export default function TeamScreen() {
-  const { teamId, teamData, setLoading, loading } = useCurrentTeam();
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
+  const { membership, team, loading } = useMembership();
   const [users, setUsers] = useState<any[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteFirstName, setInviteFirstName] = useState('');
-
-  const isCurrentUserAdmin = useMemo(() => {
-    return users.find((u) => u.uid === currentUser?.uid)?.role === 'admin';
-  }, [users, currentUser?.uid]);
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  const isCurrentUserAdmin = useMemo(() => membership?.role === 'admin', [membership]);
 
   useEffect(() => {
     const fetchMembers = async () => {
-      if (!teamId || !teamData?.members) return;
-
-      setLoading(true);
-
+      if (!team?.id) return;
+      console.log('🔁 Fetching members...');
       try {
-        const snapshots = await Promise.all(
-          teamData.members.map((uid: string) => getDoc(doc(db, 'users', uid)))
+        const q = query(collection(db, 'memberships'), where('teamId', '==', team.id));
+        const snap = await getDocs(q);
+        console.log('Membres trouvés:', snap.docs.length);
+
+        const userDocs = await Promise.all(
+          snap.docs.map((m) => getDoc(doc(db, 'users', m.data().userId)))
         );
 
-        const loaded = snapshots
-          .filter((snap) => snap.exists())
-          .map((snap) => ({ uid: snap.id, ...snap.data() }));
+        const members = userDocs.map((u, i) => {
+          const memberData = snap.docs[i].data();
+          return u.exists()
+            ? {
+                uid: u.id,
+                role: memberData.role,
+                membershipId: snap.docs[i].id,
+                email: u.data()?.email || '—',
+                displayName: u.data()?.displayName || '(Inconnu)',
+              }
+            : null;
+        }).filter(Boolean);
 
-        setUsers(loaded);
+        setUsers(members as any[]);
       } catch (err) {
-        Alert.alert('Erreur', 'Impossible de charger les membres.');
-        console.error(err);
-      } finally {
-        setLoading(false);
+        console.error('Erreur fetchMembers:', err);
+        Alert.alert('Erreur', "Impossible de charger les membres.");
       }
     };
 
     fetchMembers();
-  }, [teamId, teamData]);
+  }, [team?.id, membership?.membershipId]);
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
-    if (!email || !teamId) return;
+    if (!email || !team?.id) return;
 
     try {
       const methods = await fetchSignInMethodsForEmail(auth, email);
@@ -75,18 +82,24 @@ export default function TeamScreen() {
         const snap = await getDocs(q);
         if (!snap.empty) {
           const userDoc = snap.docs[0];
-          await updateDoc(doc(db, 'users', userDoc.id), { teamId });
+          await addDoc(collection(db, 'memberships'), {
+            userId: userDoc.id,
+            teamId: team.id,
+            role: 'member',
+            joinedAt: Timestamp.now(),
+          });
           Alert.alert('Succès', 'Utilisateur ajouté à l’équipe.');
         }
       } else {
         const invitationRef = await addDoc(collection(db, 'invitations'), {
           email,
-          teamId,
-          teamName: teamData.name, // 👈 Ajout nécessaire
+          teamId: team.id,
+          teamName: team.name,
           invitedAt: new Date().toISOString(),
           status: 'pending',
         });
-        await sendEmailInvitation(email, inviteFirstName || 'inconnu', teamData.name, invitationRef.id);
+
+        await sendEmailInvitation(email, inviteFirstName || 'Inconnu', team.name, invitationRef.id);
         Alert.alert('Invitation envoyée', 'Un e-mail a été envoyé à cet utilisateur.');
       }
 
@@ -98,10 +111,10 @@ export default function TeamScreen() {
     }
   };
 
-  const removeFromTeam = async (uid: string) => {
+  const removeFromTeam = async (membershipId: string) => {
     try {
-      await updateDoc(doc(db, 'users', uid), { teamId: '' });
-      setUsers((prev) => prev.filter((u) => u.uid !== uid));
+      await deleteDoc(doc(db, 'memberships', membershipId));
+      setUsers((prev) => prev.filter((u) => u.membershipId !== membershipId));
     } catch (err) {
       console.error(err);
       Alert.alert('Erreur', 'Impossible de retirer ce membre.');
@@ -109,9 +122,9 @@ export default function TeamScreen() {
   };
 
   const leaveTeam = async () => {
-    if (!currentUser) return;
+    if (!membership) return;
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), { teamId: '' });
+      await deleteDoc(doc(db, 'memberships', membership.membershipId));
       Alert.alert('Succès', 'Vous avez quitté l’équipe.');
     } catch (err) {
       console.error(err);
@@ -121,19 +134,18 @@ export default function TeamScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const isCurrentUser = item.uid === currentUser?.uid;
-
     return (
       <View style={styles.userRow}>
         <View>
           <Text style={styles.name}>
-            {item.displayName || '(Anonyme)'} {isCurrentUser ? '(moi)' : ''}
+            {item.displayName} {isCurrentUser ? '(moi)' : ''}
           </Text>
           <Text style={styles.email}>{item.email}</Text>
           <Text style={styles.role}>🔰 {item.role || 'membre'}</Text>
         </View>
 
         {!isCurrentUser && isCurrentUserAdmin && (
-          <TouchableOpacity style={styles.removeButton} onPress={() => removeFromTeam(item.uid)}>
+          <TouchableOpacity style={styles.removeButton} onPress={() => removeFromTeam(item.membershipId)}>
             <Text style={styles.removeButtonText}>Retirer</Text>
           </TouchableOpacity>
         )}
@@ -147,9 +159,17 @@ export default function TeamScreen() {
     );
   };
 
+  if (!team?.id) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Aucune équipe sélectionnée</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>👥 {teamData?.name || 'Équipe'}</Text>
+      <Text style={styles.title}>👥 {team.name}</Text>
 
       {isCurrentUserAdmin && (
         <View style={styles.inviteContainer}>
@@ -180,6 +200,7 @@ export default function TeamScreen() {
           data={users}
           keyExtractor={(item) => item.uid}
           renderItem={renderItem}
+          ListHeaderComponent={<Text>Membres de l’équipe :</Text>}
           ListEmptyComponent={<Text style={styles.empty}>Aucun membre.</Text>}
         />
       )}
@@ -215,7 +236,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   quitButtonText: { color: '#fff', fontWeight: 'bold' },
-  inviteContainer: { marginBottom: 20, gap: 10 },
+  inviteContainer: { marginBottom: 20 },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',

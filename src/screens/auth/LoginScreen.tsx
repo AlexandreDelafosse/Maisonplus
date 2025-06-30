@@ -1,14 +1,14 @@
-// src/screens/LoginScreen.tsx
+// src/screens/auth/LoginScreen.tsx
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-type Props = NativeStackScreenProps<any>; // Tu pourras le raffiner plus tard si besoin
+import type { RootStackParamList } from '../../navigation/types';
 
+type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,7 +16,7 @@ export default function LoginScreen({ navigation }: Props) {
   const handleLogin = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
+    } catch {
       setError("Échec de la connexion.");
     }
   };
@@ -29,6 +29,7 @@ export default function LoginScreen({ navigation }: Props) {
         onChangeText={setEmail}
         style={styles.input}
         keyboardType="email-address"
+        autoCapitalize="none"
       />
       <TextInput
         placeholder="Mot de passe"
@@ -39,7 +40,8 @@ export default function LoginScreen({ navigation }: Props) {
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button title="Connexion" onPress={handleLogin} />
-      <Text style={styles.link} onPress={() => navigation.navigate('Register')}>
+      <Text style={styles.link} onPress={() => navigation.navigate({ name: 'Register', params: {} })
+}>
         Pas encore de compte ? S’inscrire
       </Text>
     </View>

@@ -1,13 +1,15 @@
-// screens/RegisterScreen.tsx
+// src/screens/auth/RegisterScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, db } from '../../services/firebaseConfig';
 import { setDoc, doc } from 'firebase/firestore';
+import { auth, db } from '../../services/firebaseConfig';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
-export default function RegisterScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Register'>) {
+type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
+
+export default function RegisterScreen({ navigation, route }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -40,12 +42,12 @@ export default function RegisterScreen({ navigation, route }: NativeStackScreenP
       await updateProfile(user, { displayName });
 
       await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
         email: user.email,
         displayName,
         firstName,
         lastName,
         role: 'member',
-        uid: user.uid,
       });
 
       if (redirectToInvitation && invitationId) {
@@ -70,39 +72,15 @@ export default function RegisterScreen({ navigation, route }: NativeStackScreenP
 
   return (
     <View style={styles.container}>
-      <TextInput
-        placeholder="Prénom"
-        value={firstName}
-        onChangeText={setFirstName}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Nom"
-        value={lastName}
-        onChangeText={setLastName}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <TextInput
-        placeholder="Mot de passe"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        secureTextEntry
-      />
+      <TextInput placeholder="Prénom" value={firstName} onChangeText={setFirstName} style={styles.input} />
+      <TextInput placeholder="Nom" value={lastName} onChangeText={setLastName} style={styles.input} />
+      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+      <TextInput placeholder="Mot de passe" value={password} onChangeText={setPassword} style={styles.input} secureTextEntry />
 
       {loading && <Text style={styles.loading}>Création du compte...</Text>}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Button title="S’inscrire" onPress={handleRegister} />
-
       <Text style={styles.link} onPress={() => navigation.navigate('Login')}>
         Déjà un compte ? Se connecter
       </Text>
@@ -111,7 +89,7 @@ export default function RegisterScreen({ navigation, route }: NativeStackScreenP
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, marginTop: 100 },
+  container: { padding: 20, marginTop: 80 },
   input: { borderWidth: 1, marginBottom: 10, padding: 10, borderRadius: 5 },
   error: { color: 'red', marginBottom: 10, textAlign: 'center' },
   loading: { color: 'gray', marginBottom: 10, textAlign: 'center' },

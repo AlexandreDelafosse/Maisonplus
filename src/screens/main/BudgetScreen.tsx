@@ -1,4 +1,4 @@
-// src/screens/BudgetScreen.tsx
+// ✅ BudgetScreen.tsx corrigé avec le nouveau useTeamMembers()
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Modal, TextInput, TouchableOpacity, Alert,
@@ -8,8 +8,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
 import { useCurrentTeam } from '../../hooks/useCurrentTeam';
-import { useTeamMembers } from '../../hooks/useTeamMembers';
-import type { Member } from '../../hooks/useTeamMembers';
+import { useTeamMembers, Member } from '../../hooks/useTeamMembers';
 import { Dimensions } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 
@@ -32,7 +31,7 @@ export default function BudgetScreen() {
   const auth = getAuth();
   const currentUser = auth.currentUser;
   const { teamId } = useCurrentTeam();
-  const { members, loading: loadingUsers } = useTeamMembers(teamId || '');
+  const { members, loading: loadingUsers } = useTeamMembers();
 
   const [month, setMonth] = useState('');
   const [totalBudget, setTotalBudget] = useState(0);
@@ -61,8 +60,8 @@ export default function BudgetScreen() {
 
   useEffect(() => {
     if (!paidBy && members.length > 0) {
-      const fallback = members.find(m => m.id === currentUser?.uid) || members[0];
-      setPaidBy(fallback.id);
+      const fallback = members.find(m => m.user.id === currentUser?.uid) || members[0];
+      setPaidBy(fallback.user.id);
     }
   }, [members]);
 
@@ -144,7 +143,7 @@ export default function BudgetScreen() {
   const resetModal = () => {
     setLabel('');
     setAmount('');
-    setPaidBy(currentUser?.uid || members[0]?.id || '');
+    setPaidBy(currentUser?.uid || members[0]?.user.id || '');
     setDate(new Date());
     setTags('');
     setEditingIndex(null);
@@ -156,34 +155,32 @@ export default function BudgetScreen() {
       map[exp.paidBy] = (map[exp.paidBy] || 0) + exp.amount;
     });
     const summary: Summary[] = members.map(user => ({
-      userId: user.id,
-      displayName: user.displayName,
-      total: map[user.id] || 0,
+      userId: user.user.id,
+      displayName: user.user.displayName || '',
+      total: map[user.user.id] || 0,
     }));
     setTotalsByUser(summary);
   };
 
-const calculateTotalsByTag = () => {
-  const tagMap: { [tag: string]: number } = {};
-
-  expenses.forEach(exp => {
-    const splitAmount = exp.amount / (exp.tags?.length || 1);
-    exp.tags?.forEach(tag => {
-      tagMap[tag] = (tagMap[tag] || 0) + splitAmount;
+  const calculateTotalsByTag = () => {
+    const tagMap: { [tag: string]: number } = {};
+    expenses.forEach(exp => {
+      const splitAmount = exp.amount / (exp.tags?.length || 1);
+      exp.tags?.forEach(tag => {
+        tagMap[tag] = (tagMap[tag] || 0) + splitAmount;
+      });
     });
-  });
 
-  const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
 
-  return Object.entries(tagMap).map(([tag, value], index) => ({
-    name: tag,
-    amount: value,
-    color: colors[index % colors.length],
-    legendFontColor: '#333',
-    legendFontSize: 12,
-  }));
-};
-
+    return Object.entries(tagMap).map(([tag, value], index) => ({
+      name: tag,
+      amount: value,
+      color: colors[index % colors.length],
+      legendFontColor: '#333',
+      legendFontSize: 12,
+    }));
+  };
 
   return (
     <View style={styles.container}>
@@ -201,19 +198,18 @@ const calculateTotalsByTag = () => {
       )}
 
       {calculateTotalsByTag().length > 0 && (
-<PieChart
-  data={calculateTotalsByTag()}
-  width={Dimensions.get('window').width - 40}
-  height={180}
-  chartConfig={{
-    color: () => '#000',
-    labelColor: () => '#333',
-  }}
-  accessor="amount"
-  backgroundColor="transparent"
-  paddingLeft="20"
-/>
-
+        <PieChart
+          data={calculateTotalsByTag()}
+          width={Dimensions.get('window').width - 40}
+          height={180}
+          chartConfig={{
+            color: () => '#000',
+            labelColor: () => '#333',
+          }}
+          accessor="amount"
+          backgroundColor="transparent"
+          paddingLeft="20"
+        />
       )}
 
       <FlatList
@@ -223,7 +219,7 @@ const calculateTotalsByTag = () => {
           <View style={styles.expenseItem}>
             <Text style={styles.expenseText}>{item.label} - {item.amount.toFixed(2)} €</Text>
             <Text style={styles.meta}>
-              Payé par : {members.find(u => u.id === item.paidBy)?.displayName || 'Inconnu'} - {new Date(item.date).toLocaleDateString()}
+              Payé par : {members.find(u => u.user.id === item.paidBy)?.user.displayName || 'Inconnu'} - {new Date(item.date).toLocaleDateString()}
             </Text>
             {item.tags && (
               <Text style={styles.meta}>Tags : {item.tags.join(', ')}</Text>
@@ -291,15 +287,15 @@ const calculateTotalsByTag = () => {
           <View style={styles.paidByList}>
             {members.map(user => (
               <TouchableOpacity
-                key={user.id}
-                onPress={() => setPaidBy(user.id)}
+                key={user.user.id}
+                onPress={() => setPaidBy(user.user.id)}
                 style={[
                   styles.paidByItem,
-                  paidBy === user.id && styles.paidByItemSelected,
+                  paidBy === user.user.id && styles.paidByItemSelected,
                 ]}>
                 <Text style={styles.paidByText}>
-                  {user.displayName}
-                  {paidBy === user.id ? ' ✅' : ''}
+                  {user.user.displayName || 'Anonyme'}
+                  {paidBy === user.user.id ? ' ✅' : ''}
                 </Text>
               </TouchableOpacity>
             ))}

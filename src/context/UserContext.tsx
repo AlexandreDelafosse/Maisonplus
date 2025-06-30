@@ -7,11 +7,10 @@ import { db } from '../services/firebaseConfig';
 type UserData = {
   uid: string;
   email: string;
-  role: 'admin' | 'member';
   displayName: string;
-  teamId?: string;
+  firstName?: string;
+  lastName?: string;
 };
-
 
 const UserContext = createContext<UserData | null>(null);
 
@@ -27,16 +26,27 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           const docRef = doc(db, 'users', user.uid);
           const docSnap = await getDoc(docRef);
-          const role = docSnap.exists() ? docSnap.data().role || 'member' : 'member';
 
-          setUserData({
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || '',
-            role,
-          });
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+
+            setUserData({
+              uid: user.uid,
+              email: user.email || '',
+              displayName: data.displayName || user.displayName || '',
+              firstName: data.firstName || '',
+              lastName: data.lastName || '',
+            });
+          } else {
+            setUserData({
+              uid: user.uid,
+              email: user.email || '',
+              displayName: user.displayName || '',
+            });
+          }
         } catch (error) {
           console.error('Erreur récupération user :', error);
+          setUserData(null);
         }
       } else {
         setUserData(null);

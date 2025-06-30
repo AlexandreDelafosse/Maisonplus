@@ -14,6 +14,7 @@ import { db } from '../../services/firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
+import { useMembership } from '../../context/MembershipContext'; // en haut
 
 export default function ProfileScreen() {
   const auth = getAuth();
@@ -24,6 +25,7 @@ export default function ProfileScreen() {
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const { membership } = useMembership(); // à ajouter
 
   useEffect(() => {
     if (!user) return;
@@ -79,19 +81,18 @@ export default function ProfileScreen() {
     }
   };
 
-  const changeRole = async () => {
-    if (!user) return;
-    const newRole = role === 'admin' ? 'member' : 'admin';
-    const userRef = doc(db, 'users', user.uid);
-    try {
-      await updateDoc(userRef, { role: newRole });
-      setRole(newRole);
-      Alert.alert('Succès', `Rôle changé en ${newRole}`);
-    } catch (err) {
-      console.error('Erreur changement de rôle :', err);
-      Alert.alert('Erreur', 'Impossible de changer le rôle.');
-    }
-  };
+const changeRole = async () => {
+  if (!membership) return;
+  const membershipRef = doc(db, 'memberships', membership.membershipId);
+  const newRole = membership.role === 'admin' ? 'member' : 'admin';
+  try {
+    await updateDoc(membershipRef, { role: newRole });
+    Alert.alert('Succès', `Rôle changé en ${newRole}`);
+  } catch (err) {
+    console.error('Erreur changement de rôle :', err);
+    Alert.alert('Erreur', 'Impossible de changer le rôle.');
+  }
+};
 
   const goToTeamSelection = () => {
     navigation.navigate('SelectTeam');

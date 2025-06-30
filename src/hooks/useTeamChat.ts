@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'; // ✅ correction
-import { db } from '../services/firebaseConfig'; // ✅ utilise `db`
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 import { useCurrentTeam } from './useCurrentTeam';
 import { ChatMessage } from '../navigation/types';
 
 export function useTeamChat() {
-  const { teamId } = useCurrentTeam(); // ✅ pas currentTeamId
+  const { teamId } = useCurrentTeam();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
@@ -18,10 +18,10 @@ export function useTeamChat() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map((doc) => ({
+      const msgs: ChatMessage[] = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data(),
-      })) as ChatMessage[];
+        ...(doc.data() as Omit<ChatMessage, 'id'>),
+      }));
       setMessages(msgs);
     });
 

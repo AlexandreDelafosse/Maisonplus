@@ -9,10 +9,10 @@ import {
   deleteDoc,
   doc,
   updateDoc,
-  Timestamp
+  Timestamp,
 } from 'firebase/firestore';
+import { useCurrentTeam } from './useCurrentTeam';
 
-// ✅ Interface propre
 export interface TeamTask {
   id: string;
   title: string;
@@ -26,17 +26,15 @@ export interface TeamTask {
   teamId: string;
 }
 
-export const useTeamTasks = (teamId: string) => {
+export const useTeamTasks = (p0: string) => {
   const [tasks, setTasks] = useState<TeamTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const { teamId } = useCurrentTeam(); // ✅ on récupère le teamId actif
 
   useEffect(() => {
     if (!teamId) return;
 
-    const q = query(
-      collection(db, 'tasks'),
-      where('teamId', '==', teamId)
-    );
+    const q = query(collection(db, 'tasks'), where('teamId', '==', teamId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const taskList: TeamTask[] = snapshot.docs.map((docSnap) => {
@@ -46,9 +44,9 @@ export const useTeamTasks = (teamId: string) => {
           title: data.title,
           description: data.description || '',
           dueDate: data.dueDate?.toDate?.() || undefined,
-          status: (data.status as 'todo' | 'inProgress' | 'done') || 'todo',
+          status: (data.status as TeamTask['status']) || 'todo',
           assignedTo: data.assignedTo || [],
-          recurrence: (data.recurrence as 'none' | 'daily' | 'weekly' | 'monthly') || 'none',
+          recurrence: (data.recurrence as TeamTask['recurrence']) || 'none',
           createdAt: data.createdAt?.toDate?.() || new Date(),
           createdBy: data.createdBy,
           teamId: data.teamId,

@@ -7,16 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { getAuth } from 'firebase/auth';
 import {
   collection,
   query,
   where,
   getDocs,
-  getDoc,
-  doc,
 } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
+import { useCurrentTeam } from '../../../hooks/useCurrentTeam';
 
 interface EventType {
   id: string;
@@ -39,46 +37,35 @@ const EventListScreen = () => {
   const [events, setEvents] = useState<EventType[]>([]);
   const [filteredType, setFilteredType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [teamId, setTeamId] = useState<string | null>(null);
-
-  const auth = getAuth();
-  const user = auth.currentUser;
+  const { teamId } = useCurrentTeam();
 
   useEffect(() => {
-    const fetchTeamAndEvents = async () => {
-      if (!user) return;
+    const fetchEvents = async () => {
+      if (!teamId) return;
 
-      const userRef = doc(db, 'users', user.uid);
-      const snap = await getDoc(userRef);
-      const data = snap.data();
-      const userTeamId = data?.teamId;
-      setTeamId(userTeamId);
+      const q = query(collection(db, 'calendarevents'), where('teamId', '==', teamId));
+      const querySnapshot = await getDocs(q);
 
-      if (userTeamId) {
-        const q = query(collection(db, 'calendarevents'), where('teamId', '==', userTeamId));
-        const querySnapshot = await getDocs(q);
+      const fetched: EventType[] = querySnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title,
+          description: data.description || '',
+          start: data.start.toDate(),
+          end: data.end.toDate(),
+          createdByName: data.createdByName || '',
+          type: data.type || 'Autre',
+        };
+      });
 
-        const fetched: EventType[] = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            title: data.title,
-            description: data.description || '',
-            start: data.start.toDate(),
-            end: data.end.toDate(),
-            createdByName: data.createdByName || '',
-            type: data.type || 'Autre',
-          };
-        });
-
-        const sorted = fetched.sort((a, b) => a.start.getTime() - b.start.getTime());
-        setEvents(sorted);
-        setLoading(false);
-      }
+      const sorted = fetched.sort((a, b) => a.start.getTime() - b.start.getTime());
+      setEvents(sorted);
+      setLoading(false);
     };
 
-    fetchTeamAndEvents();
-  }, [user]);
+    fetchEvents();
+  }, [teamId]);
 
   const filteredEvents = filteredType
     ? events.filter((e) => e.type === filteredType)

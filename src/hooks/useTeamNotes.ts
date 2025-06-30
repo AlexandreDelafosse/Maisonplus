@@ -1,30 +1,31 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // ✅ correction
-import { db } from '../services/firebaseConfig'; // ✅ utilise `db`
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
 import { useCurrentTeam } from './useCurrentTeam';
-import { Note } from '../navigation/types'; // ✅ bien depuis types.ts
+import { Note } from '../navigation/types';
 
-export function useTeamNotes() {
-  const { teamId } = useCurrentTeam(); // ✅ pas currentTeamId
+export function useTeamNotes(): Note[] {
   const [notes, setNotes] = useState<Note[]>([]);
+  const { teamId } = useCurrentTeam();
 
   useEffect(() => {
     if (!teamId) return;
 
     const q = query(
       collection(db, 'notes'),
-      where('teamId', '==', teamId)
+      where('teamId', '==', teamId),
+      orderBy('createdAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedNotes = snapshot.docs.map((doc) => ({
+      const list: Note[] = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data(),
-      })) as Note[];
-      setNotes(fetchedNotes);
+        ...(doc.data() as Omit<Note, 'id'>),
+      }));
+      setNotes(list);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, [teamId]);
 
   return notes;

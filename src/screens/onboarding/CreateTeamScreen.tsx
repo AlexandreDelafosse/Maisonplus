@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { getAuth } from 'firebase/auth';
 import { PACKS } from '../../utils/packs';
@@ -15,7 +15,6 @@ export default function CreateTeamScreen() {
   const [teamName, setTeamName] = useState('');
   const [selectedPack, setSelectedPack] = useState('famille');
 
-  // ✅ CORRECT: typé dès le départ
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const auth = getAuth();
   const user = auth.currentUser;
@@ -26,18 +25,33 @@ export default function CreateTeamScreen() {
       return;
     }
 
+    if (!user?.uid) {
+      Alert.alert('Erreur', 'Utilisateur non connecté');
+      return;
+    }
+
     const teamId = uuid.v4().toString();
 
     try {
+      // Crée la team
       await setDoc(doc(db, 'teams', teamId), {
         name: teamName,
-        createdBy: user?.uid,
+        createdBy: user.uid,
         pack: selectedPack,
-        members: [user?.uid],
         createdAt: Date.now(),
       });
 
-      // ✅ Navigation directe
+      // Crée le membership (avec ID auto généré)
+      const membershipRef = await addDoc(collection(db, 'memberships'), {
+        userId: user.uid,
+        teamId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+
+      console.log('✅ Membership created:', membershipRef.id);
+
+      // Redirige
       navigation.navigate('SelectTeam');
     } catch (error) {
       console.error(error);
@@ -61,7 +75,8 @@ export default function CreateTeamScreen() {
         renderItem={({ item: [key, pack] }) => (
           <TouchableOpacity
             style={[styles.packCard, selectedPack === key && styles.packCardSelected]}
-            onPress={() => setSelectedPack(key)}>
+            onPress={() => setSelectedPack(key)}
+          >
             <Text style={styles.packName}>{pack.label}</Text>
             {pack.features.map(f => (
               <Text key={f} style={styles.feature}>• {f}</Text>
@@ -79,12 +94,36 @@ export default function CreateTeamScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 75 },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 8, marginBottom: 20 },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
   subtitle: { fontWeight: 'bold', fontSize: 18, marginBottom: 10 },
-  packCard: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 10, marginBottom: 10 },
-  packCardSelected: { backgroundColor: '#dff0d8', borderColor: '#28a745' },
+  packCard: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  packCardSelected: {
+    backgroundColor: '#dff0d8',
+    borderColor: '#28a745',
+  },
   packName: { fontWeight: 'bold', marginBottom: 6 },
   feature: { fontSize: 13 },
-  button: { marginTop: 20, backgroundColor: '#007AFF', padding: 14, borderRadius: 8 },
-  buttonText: { color: 'white', textAlign: 'center', fontWeight: 'bold' },
+  button: {
+    marginTop: 20,
+    backgroundColor: '#007AFF',
+    padding: 14,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
 });
