@@ -118,6 +118,25 @@ const handleSelect = (teamId: string) => {
       >
         <Text style={[styles.teamText, { color: '#fff', textAlign: 'center' }]}>+ Créer une équipe</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+  style={[styles.logoutButton]}
+  onPress={async () => {
+    try {
+      await getAuth().signOut();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' as never }],
+      });
+    } catch (err) {
+      console.error('Erreur de déconnexion:', err);
+      Alert.alert('Erreur', 'Impossible de se déconnecter.');
+    }
+  }}
+>
+  <Text style={styles.logoutText}>🚪 Se déconnecter</Text>
+</TouchableOpacity>
+
     </View>
   );
 }
@@ -145,4 +164,17 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     padding: 10,
   },
+  logoutButton: {
+  marginTop: 30,
+  padding: 14,
+  backgroundColor: '#FF3B30',
+  borderRadius: 8,
+  alignItems: 'center',
+},
+logoutText: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 16,
+},
+
 });

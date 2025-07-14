@@ -1,10 +1,13 @@
-// src/screens/auth/LoginScreen.tsx
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
+import * as SecureStore from 'expo-secure-store';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
+import { useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -14,9 +17,34 @@ export default function LoginScreen({ navigation }: Props) {
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    console.log('🔑 Tentative de connexion pour', email);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      console.log('✅ Connexion réussie pour :', cred.user.email);
+
+      // 🔍 On vérifie s'il y a une invitation stockée
+      const stored = await SecureStore.getItemAsync('pendingInvitation');
+      console.log('📦 Invitation stockée dans SecureStore :', stored);
+
+      if (stored) {
+        const { email: storedEmail, id } = JSON.parse(stored);
+        console.log('➡️ Redirection vers InvitationScreen avec :', storedEmail, id);
+
+        await SecureStore.deleteItemAsync('pendingInvitation');
+        console.log('🧹 Invitation supprimée de SecureStore');
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Invitation', params: { email: storedEmail, id } }],
+        });
+        return;
+      }
+
+      console.log('🎯 Aucune invitation trouvée, redirection vers Main');
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+
+    } catch (err: any) {
+      console.error('❌ Erreur de connexion :', err);
       setError("Échec de la connexion.");
     }
   };
@@ -40,8 +68,10 @@ export default function LoginScreen({ navigation }: Props) {
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button title="Connexion" onPress={handleLogin} />
-      <Text style={styles.link} onPress={() => navigation.navigate({ name: 'Register', params: {} })
-}>
+      <Text
+        style={styles.link}
+        onPress={() => navigation.navigate({ name: 'Register', params: {} })}
+      >
         Pas encore de compte ? S’inscrire
       </Text>
     </View>

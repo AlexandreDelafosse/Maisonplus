@@ -1,4 +1,5 @@
 require('dotenv').config();
+console.log("🔧 NGROK_URL =", process.env.NGROK_URL);
 
 const express = require('express');
 const cors = require('cors');
@@ -23,7 +24,9 @@ app.post('/send-invitation', async (req, res) => {
   console.log('REQUETE RECUE:', req.body);
   const { email, firstName, teamName, id } = req.body;
 
-  const invitationLink = `https://4b17-2a01-cb00-1c4-c700-c979-2dd1-b72a-9fc3.ngrok-free.app/--/invitation?email=${encodeURIComponent(email)}&id=${id}`; // exp://192.168.1.11:8081
+  const invitationLink = `exp://wsl4vko-anonymous-8081.exp.direct/--/invitation?email=${encodeURIComponent(email)}&id=${id}`;
+
+ // exp://192.168.1.11:8081
 
   const tranEmailApi = new Sib.TransactionalEmailsApi();
 

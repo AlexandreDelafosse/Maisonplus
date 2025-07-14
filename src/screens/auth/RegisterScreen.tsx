@@ -1,4 +1,3 @@
-// src/screens/auth/RegisterScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, TextInput, Button, StyleSheet, Text } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
@@ -6,6 +5,7 @@ import { setDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
+import * as SecureStore from 'expo-secure-store';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
@@ -22,7 +22,10 @@ export default function RegisterScreen({ navigation, route }: Props) {
   const prefillEmail = route.params?.email || '';
 
   useEffect(() => {
-    if (prefillEmail) setEmail(prefillEmail);
+    if (prefillEmail) {
+      console.log('📩 Pré-remplissage email depuis params :', prefillEmail);
+      setEmail(prefillEmail);
+    }
   }, [prefillEmail]);
 
   const handleRegister = async () => {
@@ -33,6 +36,7 @@ export default function RegisterScreen({ navigation, route }: Props) {
 
     setLoading(true);
     setError('');
+    console.log('📝 Tentative d’inscription pour', email);
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -50,21 +54,47 @@ export default function RegisterScreen({ navigation, route }: Props) {
         role: 'member',
       });
 
+      // ✅ Cas 1 : Redirection directe depuis params
       if (redirectToInvitation && invitationId) {
+        console.log('🔁 Redirection directe vers Invitation avec ID :', invitationId);
         navigation.reset({
           index: 0,
           routes: [{ name: 'Invitation', params: { email, id: invitationId } }],
         });
-      } else {
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        return;
       }
+console.log("[REGISTER] Redirection vers Invitation avec params :", { email, id: invitationId });
+
+      // ✅ Cas 2 : Redirection via SecureStore
+      const stored = await SecureStore.getItemAsync('pendingInvitation');
+      console.log('🔍 Vérification SecureStore →', stored);
+      console.log("[REGISTER] Check SecureStore pour redirection...");
+
+      if (stored) {
+        const { email: storedEmail, id } = JSON.parse(stored);
+        await SecureStore.deleteItemAsync('pendingInvitation');
+        console.log('🧹 Invitation supprimée de SecureStore');
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Invitation', params: { email: storedEmail, id } }],
+        });
+        return;
+      }
+      console.log("[REGISTER] Redirection via SecureStore :", stored);
+
+
+      // ✅ Cas standard
+      console.log('🎯 Inscription réussie sans invitation → vers Main');
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+
     } catch (err: any) {
+      console.error('❌ Erreur lors de l’inscription :', err);
       if (err.code === 'auth/email-already-in-use') {
         setError("Cette adresse e-mail est déjà utilisée.");
       } else {
         setError("Échec de l’inscription.");
       }
-      console.error(err);
     } finally {
       setLoading(false);
     }
